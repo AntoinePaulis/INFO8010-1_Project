@@ -1,0 +1,4 @@
+Host alan
+  HostName master.alan.priv
+  User andyjalloh
+  IdentityFile ~/.ssh/id_alan

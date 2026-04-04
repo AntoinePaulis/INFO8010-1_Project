@@ -1,2 +1,7 @@
 code/models/
 data/
+*.pth
+*.pyc
+__pycache__/
+.env
+code/logs/*.out
