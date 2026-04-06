@@ -176,3 +176,17 @@ https://alan.montefiore.uliege.be/jupyter/user/you/lab
 3. Click the kernel selector (top right) → **Existing Jupyter Server**
 4. Enter `https://alan.montefiore.uliege.be/jupyter`
 5. Log in and select the `deep` kernel
+
+**Reconnection**
+
+```bash
+ssh alan
+conda activate deep
+cd INFO8010-1_Project/
+```
+
+Go to the dataset
+
+```bash
+ls /scratch/users/andyjalloh/
+```
