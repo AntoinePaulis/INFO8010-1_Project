@@ -1,7 +1,19 @@
+# weights are saved on Alan but don't need to be on git
 code/models/
+
+# datasets are heavy; they'll stay in alan /scratch directory
 data/
+
+# irrelevant files
 *.pth
 *.pyc
 __pycache__/
 .env
 code/logs/*.out
+
+# Jupyter
+.ipynb_checkpoints/
+
+# WandB
+wandb/
+*.wandb
