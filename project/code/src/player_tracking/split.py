@@ -14,6 +14,7 @@ val_ds, test_ds = temp_ds.split(split_ratio=0.67, random_state=42, shuffle=True)
 
 print(len(train_ds), len(val_ds), len(test_ds))
 
+# Note that the folder is name train_split otherwise, this creates conflicts but then, it will be renamed train
 train_ds.as_yolo(
     images_directory_path="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/train_split/images",
     annotations_directory_path="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/train_split/labels",
