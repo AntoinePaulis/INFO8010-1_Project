@@ -15,8 +15,8 @@ val_ds, test_ds = temp_ds.split(split_ratio=0.67, random_state=42, shuffle=True)
 print(len(train_ds), len(val_ds), len(test_ds))
 
 train_ds.as_yolo(
-    images_directory_path="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/train/images",
-    annotations_directory_path="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/train/labels",
+    images_directory_path="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/train_split/images",
+    annotations_directory_path="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/train_split/labels",
 )
 
 val_ds.as_yolo(
