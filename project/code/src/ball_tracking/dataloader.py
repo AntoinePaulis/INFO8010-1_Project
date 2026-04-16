@@ -19,13 +19,13 @@ def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): # To 
 
 
 class BallDataset(Dataset):
-    def __init__(self, gameList, root_dir="/scratch/users/andyjalloh/Dataset",
+    def __init__(self, train=True, split=0.7, root_dir="/scratch/users/andyjalloh/Dataset",
                  img_size=(640, 360), variance=10):
         """
         Args:
             gameList: list of the games we want in the form of [game1, game, ...]
             root_dir: path to Dataset/
-            train: if True use games 1-8, else games 9-10 (adjust as needed)
+            train:
             img_size: the ouput size
             variance: variance of the Gaussian heatmap. variance=10 cfr. Tracknet paper
         """
@@ -42,9 +42,17 @@ class BallDataset(Dataset):
 
         self.dataset = []
 
-        for game in gameList:
+        game_dir_list = sorted(os.listdir(root_dir)) # Besoin de sorted ?
+        
+        for game in game_dir_list:
             game_path = os.path.join(root_dir, game)
-            clip_dir_list = sorted(os.listdir(game_path))
+            clip_dir_list = sorted(os.listdir(game_path)) # Besoin de sorted ?
+            
+            split_idx = int(split * len(clip_dir_list))
+            if train:
+                clip_dir_list = clip_dir_list[:split_idx]
+            else:
+                clip_dir_list = clip_dir_list[split_idx:]
             
             for clip in clip_dir_list:
                 clip_path = os.path.join(game_path, clip)

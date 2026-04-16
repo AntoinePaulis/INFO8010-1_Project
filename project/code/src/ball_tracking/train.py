@@ -16,8 +16,10 @@ network = TrackNet(parameters["nb_input_frame"])
 
 optimizer = torch.optim.Adam(network.parameters(), lr=parameters["learning_rate"])
 
-trainset = ""
-testset = ""
+criterion = ""
 
-print(f"\nTrain size: {len(trainset)}, Test size: {len(testset)}")
+trainloader = ""
+testloader = ""
+
+print(f"\nTrain size: {len(trainloader)}, Test size: {len(testloader)}")
 
