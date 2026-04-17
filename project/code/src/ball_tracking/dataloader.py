@@ -42,11 +42,17 @@ class BallDataset(Dataset):
 
         self.dataset = []
 
-        game_dir_list = sorted(os.listdir(root_dir)) # Besoin de sorted ?
+        game_dir_list = sorted([
+            g for g in os.listdir(root_dir)
+            if os.path.isdir(os.path.join(root_dir, g))
+        ]) # Besoin de sorted ?
         
         for game in game_dir_list:
             game_path = os.path.join(root_dir, game)
-            clip_dir_list = sorted(os.listdir(game_path)) # Besoin de sorted ?
+            clip_dir_list = sorted([
+                c for c in os.listdir(game_path)
+                if os.path.isdir(os.path.join(game_path, c))
+            ]) # Besoin de sorted ?
             
             split_idx = int(split * len(clip_dir_list))
             if train:
