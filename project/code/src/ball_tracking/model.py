@@ -6,7 +6,7 @@ class Block(nn.Module):
         super().__init__()
         
         self.net = nn.Sequential(
-            nn.Conv2d(self, in_channels, out_channels, kernel_size, stride=stride, padding=padding),
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding),
             nn.BatchNorm2d(out_channels),
             # ReLU after the bacth normalization because however, batch normalization will create some negative values
             nn.ReLU()
@@ -15,7 +15,7 @@ class Block(nn.Module):
         return self.net(x)
 
 class TrackNet(nn.Module):
-    def __int__(self, nb_input_frames=3):
+    def __init__(self, nb_input_frames=3):
         # The number of input frames is a parameter cfr. Tracknet paper
         super().__init__()
         self.net = nn.Sequential (

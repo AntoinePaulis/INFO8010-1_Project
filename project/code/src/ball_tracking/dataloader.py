@@ -20,7 +20,7 @@ def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): # To 
 
 class BallDataset(Dataset):
     def __init__(self, train=True, split=0.7, root_dir="/scratch/users/andyjalloh/Dataset",
-                 img_size=(640, 360), variance=10):
+                 img_size=(640, 360), variance=10, nb_input_frames=3):
         """
         Args:
             gameList: list of the games we want in the form of [game1, game, ...]
@@ -33,6 +33,7 @@ class BallDataset(Dataset):
         self.root_dir = root_dir
         self.w, self.h = img_size
         self.variance = variance
+        self.nb_input_frames = nb_input_frames
         
         self.transform = transforms.Compose([
             transforms.Resize((self.h, self.w)),
@@ -64,23 +65,27 @@ class BallDataset(Dataset):
                 clip_path = os.path.join(game_path, clip)
                 df = pd.read_csv(os.path.join(clip_path, "Label.csv"))
                 
-                for _, row in df.iterrows():
-                    img_path = os.path.join(clip_path, row["file name"])
-                    x = float(row["x-coordinate"]) * self.w / 1280.0
-                    y = float(row["y-coordinate"]) * self.h / 720.0
-                    self.dataset.append((img_path, x, y, row["visibility"], game, clip))
+                for i in range(len(df)-self.nb_input_frames):
+                    list_img_path = []
+                    for j in range(nb_input_frames):
+                        img_path = os.path.join(clip_path,df.iloc[i + j]["file name"])
+                        list_img_path.append(img_path)
+                    x = float(df.iloc[i]["x-coordinate"]) * self.w / 1280.0
+                    y = float(df.iloc[i]["y-coordinate"]) * self.h / 720.0
+                    self.dataset.append((list_img_path, x, y, df.iloc[i]["visibility"]))
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, index):
-        img_path, x, y, visibility, game, clip = self.dataset[index]
+        list_img_path, x, y, visibility = self.dataset[index]
 
-        img = self.transform(Image.open(img_path).convert("RGB"))
-
+        list_img = []
+        
+        for img_path in list_img_path:
+            list_img.append(self.transform(Image.open(img_path).convert("RGB")))
+        
         heatmap = generate_gaussian_heatmap(self.h, self.w, x, y, visibility, self.variance)
         heatmap = torch.from_numpy(heatmap).unsqueeze(0) # (H, W) -> (1, H, W)
 
-        # Return game and clip because when we will need ithem when we will train
-        # to check the consecutive frames
-        return img, heatmap, game, clip
+        return torch.cat(list_img, dim=0), heatmap
