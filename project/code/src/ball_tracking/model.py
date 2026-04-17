@@ -44,7 +44,7 @@ class TrackNet(nn.Module):
             Block(in_channels=64, out_channels=64),
             Block(in_channels=64, out_channels=1),
             # 256 ???
-            nn.Softmax(dim=1)
+            nn.Softmax(dim=1) # Error here softmax maybe for each pixel ?
         )
     
     def forward(self, x):

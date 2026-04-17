@@ -12,6 +12,13 @@ parameters = {
     "nb_input_frame" : 3
 }
 
+run = wandb.init(
+    entity="uliege-tennis-tracking",
+    project="ball-tracking",
+    name="TrackNet_test",
+    config=parameters
+)
+
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 print(f'Using device: {device}')
 
@@ -20,10 +27,11 @@ network.to(device)
 
 optimizer = torch.optim.Adam(network.parameters(), lr=parameters["learning_rate"])
 
+# Initialize the criterion
 criterion = ""
 
-trainSet = BallDataset(train=True)
-testSet = BallDataset(train=False)
+trainSet = BallDataset(train=True, nb_input_frames=parameters["nb_input_frame"])
+testSet = BallDataset(train=False, nb_input_frames=parameters["nb_input_frame"])
 
 trainloader = DataLoader(trainSet, batch_size=4, shuffle=False, num_workers=2)
 testloader = DataLoader(testSet, batch_size=4, shuffle=False, num_workers=2)
@@ -41,11 +49,10 @@ def train(num_epochs):
         test_losses = []
         network.train()
 
-        for img, heatmap, game, clip in trainloader:
-            """
+        for x, y in trainloader:
             x = x.to(device)
             y = y.to(device)
-            """
+            
             pred = network(x)
             loss = criterion(pred, y)
             train_losses.append(loss.detach())
@@ -56,7 +63,6 @@ def train(num_epochs):
 
         network.eval()
         with torch.no_grad():
-            correct = 0
 
             for x, y in testloader:
                 x = x.to(device)
@@ -66,10 +72,15 @@ def train(num_epochs):
                 loss = criterion(pred, y)
                 test_losses.append(loss)
 
-                y_pred = pred.argmax(dim=-1)
-                correct = correct + (y_pred == y).sum()
+        epoch_train_loss = torch.mean(torch.tensor(train_losses))
+        epoch_test_loss = torch.mean(torch.tensor(test_losses))
 
-        train_avg_loss.append(torch.mean(torch.tensor(train_losses)))
-        test_avg_loss.append(torch.mean(torch.tensor(test_losses)))
-        print("Epoch "+str(i))
+        train_avg_loss.append(epoch_train_loss)
+        test_avg_loss.append(epoch_test_loss)
+        
+        wandb.log({"epoch": i + 1,"train_loss": epoch_train_loss,"test_loss": epoch_test_loss})
+        print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and test_loss = "+str(epoch_test_loss))
+        
     return train_avg_loss, test_avg_loss
+
+train_avg_loss, test_avg_loss, test_accuracy = train(parameters["num_eprochs"])
