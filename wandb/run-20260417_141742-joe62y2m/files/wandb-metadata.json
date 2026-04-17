@@ -1,0 +1,28 @@
+{
+  "os": "Linux-4.18.0-193.6.3.el8_2.x86_64-x86_64-with-glibc2.28",
+  "python": "CPython 3.9.23",
+  "startedAt": "2026-04-17T12:17:42.945986Z",
+  "program": "/home/andyjalloh/INFO8010-1_Project/project/code/src/player_tracking/model.py",
+  "codePath": "project/code/src/player_tracking/model.py",
+  "codePathLocal": "project/code/src/player_tracking/model.py",
+  "git": {
+    "remote": "https://github.com/AntoinePaulis/INFO8010-1_Project.git",
+    "commit": "d5e412d467648faed3c904b43e2a48bb6481e01d"
+  },
+  "email": "andy.jalloh@student.uliege.be",
+  "root": "/home/andyjalloh/INFO8010-1_Project",
+  "host": "master",
+  "executable": "/home/andyjalloh/anaconda3/envs/deep/bin/python",
+  "cpu_count": 16,
+  "cpu_count_logical": 32,
+  "disk": {
+    "/": {
+      "total": "477170962432",
+      "used": "136200253440"
+    }
+  },
+  "memory": {
+    "total": "50107613184"
+  },
+  "writerId": "d0zlnv3t6r7lkasbdndwzc34qhjzi4ss"
+}

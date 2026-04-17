@@ -1,0 +1,54 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            yr6zggmt0gsy4ymvhyf76v5rk0ehhins:
+                codePath: project/code/src/player_tracking/model.py
+                codePathLocal: project/code/src/player_tracking/model.py
+                cpu_count: 16
+                cpu_count_logical: 32
+                disk:
+                    /:
+                        total: "477170962432"
+                        used: "136174071808"
+                email: andy.jalloh@student.uliege.be
+                executable: /home/andyjalloh/anaconda3/envs/deep/bin/python
+                git:
+                    commit: d5e412d467648faed3c904b43e2a48bb6481e01d
+                    remote: https://github.com/AntoinePaulis/INFO8010-1_Project.git
+                host: master
+                memory:
+                    total: "50107613184"
+                os: Linux-4.18.0-193.6.3.el8_2.x86_64-x86_64-with-glibc2.28
+                program: /home/andyjalloh/INFO8010-1_Project/project/code/src/player_tracking/model.py
+                python: CPython 3.9.23
+                root: /home/andyjalloh/INFO8010-1_Project
+                startedAt: "2026-04-17T12:05:29.186583Z"
+                writerId: yr6zggmt0gsy4ymvhyf76v5rk0ehhins
+        m: []
+        python_version: 3.9.23
+        t:
+            "1":
+                - 1
+                - 41
+            "2":
+                - 1
+                - 41
+            "3":
+                - 2
+                - 13
+                - 16
+            "4": 3.9.23
+            "5": 0.25.1
+            "12": 0.25.1
+            "13": linux-x86_64
+batch:
+    value: 2
+device:
+    value: cpu
+eporchs:
+    value: 1
+imgsz:
+    value: 320
+model:
+    value: yolov8n.pt
