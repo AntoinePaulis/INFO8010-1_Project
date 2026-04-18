@@ -15,4 +15,4 @@
 source /home/andyjalloh/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
-python code/src/ball_tracking/train.py
+python train_test.py
