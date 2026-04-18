@@ -1,6 +1,7 @@
 import wandb
 import torch
 from model import TrackNet
+import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from dataloader import BallDataset
@@ -27,8 +28,7 @@ network.to(device)
 
 optimizer = torch.optim.Adam(network.parameters(), lr=parameters["learning_rate"])
 
-# Initialize the criterion
-criterion = ""
+criterion = nn.BCELoss()
 
 trainSet = BallDataset(train=True, nb_input_frames=parameters["nb_input_frame"])
 testSet = BallDataset(train=False, nb_input_frames=parameters["nb_input_frame"])

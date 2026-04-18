@@ -65,7 +65,7 @@ class BallDataset(Dataset):
                 clip_path = os.path.join(game_path, clip)
                 df = pd.read_csv(os.path.join(clip_path, "Label.csv"))
                 
-                for i in range(len(df)-self.nb_input_frames):
+                for i in range(len(df)-self.nb_input_frames+1):
                     list_img_path = []
                     for j in range(nb_input_frames):
                         img_path = os.path.join(clip_path,df.iloc[i + j]["file name"])

@@ -42,9 +42,9 @@ class TrackNet(nn.Module):
             nn.Upsample(scale_factor=2),
             Block(in_channels=128, out_channels=64),
             Block(in_channels=64, out_channels=64),
-            Block(in_channels=64, out_channels=1),
-            # 256 ???
-            nn.Softmax(dim=1) # Error here softmax maybe for each pixel ?
+            Block(in_channels=64, out_channels=256), # 256 = range of pixel
+            nn.Softmax(dim=1)
+            # The end will not fit the expected shape of the output.
         )
     
     def forward(self, x):
