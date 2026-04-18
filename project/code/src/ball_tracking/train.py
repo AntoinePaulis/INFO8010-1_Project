@@ -6,11 +6,16 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from dataloader import BallDataset
 
+
 parameters = {
+    "Optimizer" : "Adam",
     "model" : "TrackNet",
     "learning_rate" : 0.01,
     "num_eprochs" : 10,
-    "nb_input_frame" : 3
+    "nb_input_frame" : 3,
+    "weight_decay" : "no", # Use of AdamW
+    "scheduling" : "no",
+    "weight_init" : "no"
 }
 
 run = wandb.init(
