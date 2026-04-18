@@ -17,4 +17,4 @@ conda activate deep
 
 cd /home/andyjalloh/INFO8010-1_Project/project/code/src/ball_tracking/
 
-python train_test.py
+python train.py

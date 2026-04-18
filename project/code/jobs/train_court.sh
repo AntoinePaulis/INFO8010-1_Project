@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_ball
+#SBATCH --job-name=train_court
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -15,4 +15,6 @@
 source /home/andyjalloh/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
-python code/src/court_detection/train.py
+cd /home/andyjalloh/INFO8010-1_Project/project/code/src/court_detection/
+
+python train.py
