@@ -6,5 +6,5 @@
 
 ## Team
 
-- Jalloh Andy Andy.Jalloh@student.uliege.be
-- Paulis Antoine Antoine.Paulis@student.uliege.be
+- Jalloh Andy andy.Jalloh@student.uliege.be
+- Paulis Antoine antoine.Paulis@student.uliege.be
