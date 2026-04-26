@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 class Block(nn.Module):
@@ -21,29 +20,29 @@ class TrackNet(nn.Module):
         self.net = nn.Sequential (
             Block(in_channels=3*nb_input_frames, out_channels=64),
             Block(in_channels=64, out_channels=64),
-            nn.MaxPool2d(2),
+            nn.MaxPool2d(kernel_size=2, stride=2), # if MaxPool2d(), stride would default at kernel size = 3. we enforce it to 2
             Block(in_channels=64, out_channels=128),
             Block(in_channels=128, out_channels=128),
-            nn.MaxPool2d(2),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             Block(in_channels=128, out_channels=256),
             Block(in_channels=256, out_channels=256),
             Block(in_channels=256, out_channels=256),
-            nn.MaxPool2d(2),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             Block(in_channels=256, out_channels=512),
             Block(in_channels=512, out_channels=512),
             Block(in_channels=512, out_channels=512),
-            nn.Upsample(2),
+            nn.Upsample(scale_factor=2),
             Block(in_channels=512, out_channels=256),
             Block(in_channels=256, out_channels=256),
             Block(in_channels=256, out_channels=256),
-            nn.Upsample(2),
+            nn.Upsample(scale_factor=2),
             Block(in_channels=256, out_channels=128),
             Block(in_channels=128, out_channels=128),
             nn.Upsample(scale_factor=2),
             Block(in_channels=128, out_channels=64),
             Block(in_channels=64, out_channels=64),
-            Block(in_channels=64, out_channels=256), # 256 = range of pixel
-            nn.Softmax(dim=1)
+            Block(in_channels=64, out_channels=256) # 256 = range of pixel
+            # nn.Softmax(dim=1), we get rid of it since we use cross-entropy
             # The end will not fit the expected shape of the output.
         )
     

@@ -7,4 +7,5 @@ opencv-python
 matplotlib
 ultralytics
 supervision
+json
 os
