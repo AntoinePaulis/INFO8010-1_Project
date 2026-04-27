@@ -1,8 +1,6 @@
 from ultralytics import YOLO
 import wandb
 
-# Now test different YOLO and different config
-
 parameters = {
     "model" : "yolov8n.pt",
     "eporchs" : 1,
@@ -14,13 +12,13 @@ parameters = {
 run = wandb.init(
     entity="uliege-tennis-tracking",
     project="player-tracking",
-    name="yolov8n_test",
+    name="yolov8n_test_corrupted",
     config=parameters
 )
 
 model = YOLO("yolov8n.pt")
 
-model.train(
+training = model.train(
     data="/scratch/users/andyjalloh/player_tracking/Tennis_Player_Detection.yolov8/data.yaml",
     epochs=parameters["eporchs"],
     imgsz=parameters["imgsz"],
@@ -30,7 +28,16 @@ model.train(
     device=parameters["device"]
 )
 
-# Évaluation sur le test set
+wandb.log({
+    "train/box_loss": training.results_dict.get("train/box_loss"),
+    "train/cls_loss": training.results_dict.get("train/cls_loss"),
+    "train/dfl_loss": training.results_dict.get("train/dfl_loss"),
+    "val/box_loss": training.results_dict.get("val/box_loss"),
+    "val/cls_loss": training.results_dict.get("val/cls_loss"),
+    "val/dfl_loss": training.results_dict.get("val/dfl_loss"),
+})
+
+# Eval on the test set
 metrics = model.val(split="test")
 
 table = wandb.Table(columns=["Metric", "Value"])
@@ -40,8 +47,6 @@ table.add_data("mAP75",metrics.box.map75)
 table.add_data("Precision",metrics.box.mp)
 table.add_data("Recall",metrics.box.mr)
 table.add_data("F1",metrics.box.f1.mean())
-
-# Further add loss if necessary
 
 wandb.log({"Test Metrics": table})
 wandb.finish()

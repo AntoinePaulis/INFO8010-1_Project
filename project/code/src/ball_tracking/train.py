@@ -1,11 +1,53 @@
 import wandb
 import torch
 from model import TrackNet
-import torch.nn as nn
-import matplotlib.pyplot as plt
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataloader import BallDataset
+import torch.nn as nn
+import torch.nn.functional as F
+
+# Claude generated
+def compute_ball_metrics(pred, y, threshold=7):
+    """
+    pred : (B, 256, H, W) - raw logits from TrackNet (256 classes)
+    y    : (B, 1, H, W)   - normalized heatmap [0,1]
+    """
+    B, _, H, W = pred.shape
+    tp, fp, fn, tn = 0, 0, 0, 0
+
+    # Convert pred logits to class indices (0-255), then normalize back
+    pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
+
+    for b in range(B):
+        true_heatmap = y[b, 0]          # (H, W)
+        pred_heatmap = pred_class[b].float() / 255.0  # (H, W)
+
+        ball_visible = true_heatmap.max() > 0.01
+
+        if not ball_visible:
+            # Ball is invisible — good prediction = near-zero heatmap
+            if pred_heatmap.max() < 0.01:
+                tn += 1   # correctly predicted no ball
+            else:
+                fp += 1   # predicted a ball that doesn't exist
+        else:
+            # Ball is visible — check if predicted position is close enough
+            true_idx = torch.argmax(true_heatmap)
+            pred_idx = torch.argmax(pred_heatmap)
+
+            true_y_coord, true_x_coord = divmod(true_idx.item(), W)
+            pred_y_coord, pred_x_coord = divmod(pred_idx.item(), W)
+
+            dist = ((pred_x_coord - true_x_coord)**2 + 
+                    (pred_y_coord - true_y_coord)**2) ** 0.5
+
+            if dist < threshold:
+                tp += 1
+            else:
+                fp += 1
+                fn += 1
+
+    return tp, fp, fn, tn
 
 def criterionCrossEntropy(pred, y):
     # Page 8 - TrackeNet paper
@@ -25,28 +67,22 @@ def criterionFocalLoss(pred, y, gamma=2):
     
     return loss.mean()
 
-criterionList = [
-    "Cross-entropy loss",
-    "Focal loss"
-]
-
-optimizerList = [
-    "Adam",
-    "AdamW"
-]
-
 parameters = {
-    "optimizer" : optimizerList[0],
+    "optimizer" : "Cross-entropy loss",
     "model" : "TrackNet",
-    "criterion" : criterionList[0],
+    "num_workers" : 0,
+    "batch_size" : 4,
+    "train_coef" : 0.7,
+    "val_coef" : 0.15,
+    "criterion" : "Adam",
     "learning_rate" : 0.01,
     "num_eprochs" : 10,
     "nb_input_frame" : 3,
     "variance" : 10,
     "split" : 0.7,
     "scheduler" : False,
-    "weight_init" : False,
-    "drop out" : False
+    "weight_init" : "uniform", # uniform on the paper but probably updated
+    "dropout" : False
 }
 
 if parameters["criterion"] == "Focal loss":
@@ -59,6 +95,9 @@ if parameters["scheduler"]:
     parameters["gamma_scheduler"] = 0.1
     parameters["step_size_scheduler"] = 5
 
+if parameters["dropout"]:
+    parameters["dropout_p"] = 0.2
+
 run = wandb.init(
     entity="uliege-tennis-tracking",
     project="ball-tracking",
@@ -69,7 +108,8 @@ run = wandb.init(
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 print(f'Using device: {device}')
 
-network = TrackNet(parameters["nb_input_frame"])
+network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"],
+                   dropout=parameters["dropout"], dropout_p=parameters["dropout_p"])
 network.to(device)
 
 if parameters["optimizer"] == "Adam":
@@ -84,27 +124,30 @@ if parameters["scheduler"] == True:
         gamma=parameters["gamma_scheduler"])
     
     
-trainSet = BallDataset(train=True, nb_input_frames=parameters["nb_input_frame"], 
-                       variance=parameters["variance"], split=parameters["split"])
-testSet = BallDataset(train=False, nb_input_frames=parameters["nb_input_frame"], 
-                      variance=parameters["variance"], split=parameters["split"])
+trainSet = BallDataset(type="train", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
+                       nb_input_frames=parameters["nb_input_frame"],  variance=parameters["variance"], split=parameters["split"])
+valSet = BallDataset(type="val", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
+                     nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], split=parameters["split"])
 
-trainloader = DataLoader(trainSet, batch_size=4, shuffle=False, num_workers=2)
-testloader = DataLoader(testSet, batch_size=4, shuffle=False, num_workers=2)
+trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=False, 
+                         num_workers=parameters["num_workers"])
+valloader = DataLoader(valSet, batch_size=parameters["batch_size"], shuffle=False, 
+                        num_workers=parameters["num_workers"])
 
-print(f"\nTrain size: {len(trainloader)}, Test size: {len(testloader)}")
+print(f"\nTrain size: {len(trainloader)}, Test size: {len(valloader)}")
 
 # From homework 2
 
 def train(num_epochs):
     train_avg_loss = []
-    test_avg_loss = []
+    val_avg_loss = []
 
     for i in range(num_epochs):
         train_losses = []
-        test_losses = []
+        val_losses = []
         network.train()
-
+        TP, TN, FP, FN = 0, 0, 0, 0
+        
         for x, y in trainloader:
             x = x.to(device)
             y = y.to(device)
@@ -125,7 +168,7 @@ def train(num_epochs):
         network.eval()
         with torch.no_grad():
 
-            for x, y in testloader:
+            for x, y in valloader:
                 x = x.to(device)
                 y = y.to(device)
 
@@ -135,8 +178,14 @@ def train(num_epochs):
                     loss = criterionCrossEntropy(pred, y)
                 elif parameters["criterion"] == "Focal loss":
                     loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
-            
-                test_losses.append(loss)
+
+                TP_i, TN_i, FP_i, FN_i = compute_ball_metrics(pred, y)
+                TP += TP_i
+                TN += TN_i
+                FP += FP_i
+                FN += FN_i
+                
+                val_losses.append(loss)
 
         if parameters["scheduler"] == True:
             scheduler.step()
@@ -144,20 +193,36 @@ def train(num_epochs):
         lr = optimizer.param_groups[0]["lr"] # Because can change with the scheduler
         
         epoch_train_loss = torch.mean(torch.tensor(train_losses))
-        epoch_test_loss = torch.mean(torch.tensor(test_losses))
+        epoch_val_loss = torch.mean(torch.tensor(val_losses))
 
         train_avg_loss.append(epoch_train_loss)
-        test_avg_loss.append(epoch_test_loss)
+        val_avg_loss.append(epoch_val_loss)
+        
+        # number of good predictions over the total number
+        accuracy = (TP+TN)/(TP+TN+FP+FN)
+        # proportion of good predictions among all the positive predictions
+        precision = TP/(TP+FP)
+        # proportion of positives that are detected
+        recall = TP/(TP+FN)
+        
+        f1 = 2*precision*recall/(precision+recall)
         
         wandb.log({
-            "epoch": i + 1,
-            "train_loss": epoch_train_loss,
-            "test_loss": epoch_test_loss,
-            "learning_rate": lr
+            "epoch" : i + 1,
+            "train_loss" : epoch_train_loss,
+            "val_loss" : epoch_val_loss,
+            "learning_rate" : lr,
+            "val/precision" : precision,
+            "val/recall" : recall,
+            "val/f1" : f1,
+            "val/TP" : TP,
+            "val/FP" : FP,
+            "val/FN" : FN,
+            "val/TN" : TN,
         })
         
-        print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and test_loss = "+str(epoch_test_loss))
+        print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
         
-    return train_avg_loss, test_avg_loss
+    return train_avg_loss, val_avg_loss
 
-train_avg_loss, test_avg_loss = train(parameters["num_eprochs"])
+train_avg_loss, val_avg_loss = train(parameters["num_eprochs"])

@@ -2,24 +2,23 @@ import wandb
 import torch
 from model import TrackNetCourt
 import torch.nn as nn
-import matplotlib.pyplot as plt
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataloader import CourtDataset
-optimizerList = [
-    "Adam",
-    "AdamW"
-]
 
 parameters = {
-    "optimizer" : optimizerList[0],
+    "optimizer" : "Adam",
     "model" : "TrackNet",
+    "num_workers" : 0, # 0 for the simple local test
+    "batch_size" : 4,
+    "split" : 0.7,
     "criterion" : "MSE",
     "learning_rate" : 0.01,
-    "num_eprochs" : 10,
+    "num_eprochs" : 1, # 1 for the simple local test
     "variance" : 10,
     "scheduler" : False,
-    "weight_init" : False,
-    "drop out" : False
+    "weight_init" : "uniform", # uniform on the paper but probably updated
+    "dropout" : False
 }
 
 if parameters["optimizer"] == "AdamW":
@@ -28,6 +27,9 @@ if parameters["optimizer"] == "AdamW":
 if parameters["scheduler"]:
     parameters["gamma_scheduler"] = 0.1
     parameters["step_size_scheduler"] = 5
+
+if parameters["dropout"]:
+    parameters["dropout_p"] = 0.2
 
 run = wandb.init(
     entity="uliege-tennis-tracking",
@@ -39,7 +41,8 @@ run = wandb.init(
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 print(f'Using device: {device}')
 
-network = TrackNetCourt()
+network = TrackNetCourt(weight_init=parameters["weight_init"], dropout=parameters["dropout"],
+                        dropout_p=parameters["dropout_p"])
 network.to(device)
 
 if parameters["optimizer"] == "Adam":
@@ -55,23 +58,27 @@ if parameters["scheduler"] == True:
 
 criterion = nn.MSELoss()
 
-trainSet = CourtDataset(train=True, variance=parameters["variance"])
-testSet = CourtDataset(train=False, variance=parameters["variance"])
+trainSet = CourtDataset(type="train", split=parameters["split"], variance=parameters["variance"])
+valSet = CourtDataset(type="val", split=parameters["split"], variance=parameters["variance"])
 
-trainloader = DataLoader(trainSet, batch_size=4, shuffle=False, num_workers=2)
-testloader = DataLoader(testSet, batch_size=4, shuffle=False, num_workers=2)
+trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=False, 
+                         num_workers=parameters["num_workers"])
+valloader = DataLoader(valSet, batch_size=parameters["batch_size"], shuffle=False, 
+                        num_workers=parameters["num_workers"])
 
-print(f"\nTrain size: {len(trainloader)}, Test size: {len(testloader)}")
+print(f"\nTrain size: {len(trainloader)}, Test size: {len(valloader)}")
 
 # From homework 2
 
 def train(num_epochs):
     train_avg_loss = []
-    test_avg_loss = []
+    val_avg_loss = []
 
     for i in range(num_epochs):
         train_losses = []
-        test_losses = []
+        val_losses = []
+        val_mae = []
+        
         network.train()
 
         for x, y in trainloader:
@@ -89,13 +96,17 @@ def train(num_epochs):
         network.eval()
         with torch.no_grad():
 
-            for x, y in testloader:
+            for x, y in valloader:
                 x = x.to(device)
                 y = y.to(device)
 
                 pred = network(x)
+                
                 loss = criterion(pred, y)
-                test_losses.append(loss)
+                val_losses.append(loss)
+                
+                mae = F.l1_loss(pred, y)
+                val_mae.append(mae)
         
         if parameters["scheduler"] == True:
             scheduler.step()
@@ -103,20 +114,22 @@ def train(num_epochs):
         lr = optimizer.param_groups[0]["lr"] # Because can change with the scheduler
 
         epoch_train_loss = torch.mean(torch.tensor(train_losses))
-        epoch_test_loss = torch.mean(torch.tensor(test_losses))
-
+        epoch_val_loss = torch.mean(torch.tensor(val_losses))
+        epoch_val_mae = torch.mean(torch.tensor(val_mae))
+        
         train_avg_loss.append(epoch_train_loss)
-        test_avg_loss.append(epoch_test_loss)
+        val_avg_loss.append(epoch_val_loss)
         
         wandb.log({
             "epoch": i + 1,
             "train_loss": epoch_train_loss,
-            "test_loss": epoch_test_loss,
+            "val_loss": epoch_val_loss,
+            "val_mae": epoch_val_mae,
             "learning_rate": lr
         })
         
-        print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and test_loss = "+str(epoch_test_loss))
+        print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
         
-    return train_avg_loss, test_avg_loss
+    return train_avg_loss, val_avg_loss
 
-train_avg_loss, test_avg_loss = train(parameters["num_eprochs"])
+train_avg_loss, val_avg_loss = train(parameters["num_eprochs"])

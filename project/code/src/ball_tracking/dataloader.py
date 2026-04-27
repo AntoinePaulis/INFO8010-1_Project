@@ -19,7 +19,7 @@ def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): # To 
 
 
 class BallDataset(Dataset):
-    def __init__(self, train=True, split=0.7, root_dir="/scratch/users/andyjalloh/Dataset",
+    def __init__(self, type="train", train_coef=0.7, val_coef=0.15, root_dir="/scratch/users/andyjalloh/Dataset",
                  img_size=(640, 360), variance=10, nb_input_frames=3):
         """
         Args:
@@ -55,11 +55,15 @@ class BallDataset(Dataset):
                 if os.path.isdir(os.path.join(game_path, c))
             ]) # Besoin de sorted ?
             
-            split_idx = int(split * len(clip_dir_list))
-            if train:
-                clip_dir_list = clip_dir_list[:split_idx]
-            else:
-                clip_dir_list = clip_dir_list[split_idx:]
+            n = len(clip_dir_list)
+            train_end = int(train_coef * n)
+            val_end   = int((train_coef + val_coef) * n)
+            if type == "train":
+                clip_dir_list = clip_dir_list[:train_end]
+            elif type == "val":
+                clip_dir_list = clip_dir_list[train_end:val_end]
+            elif type == "test":
+                clip_dir_list = clip_dir_list[val_end:]
             
             for clip in clip_dir_list:
                 clip_path = os.path.join(game_path, clip)

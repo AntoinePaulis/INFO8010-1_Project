@@ -1,1 +1,13 @@
 .DS_Store
+
+# wandb stuff
+wandb/
+*.wandb
+*.log
+
+# yolo stuff
+runs/
+
+# python stuff
+__pycache__/
+*.pyc
