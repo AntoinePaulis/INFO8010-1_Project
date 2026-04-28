@@ -20,7 +20,7 @@ class Block(nn.Module):
         x = self.net(x)
         if self.dropout:
             x = self.dropout(x)
-        return
+        return x
 
 class TrackNet(nn.Module):
     def __init__(self, weight_init, nb_input_frames=3, dropout=False, dropout_p=0.2):

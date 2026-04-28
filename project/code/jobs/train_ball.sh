@@ -6,13 +6,13 @@
 #SBATCH --mem=64G
 #SBATCH --time=48:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --output=log.out
-#SBATCH --error=err.err
+#SBATCH --output=../logs/train_ball_%j.out
+#SBATCH --error=../logs/train_ball_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=antoine.paulis@student.uliege.be
+#SBATCH --mail-user=andy.jalloh@student.uliege.be
 #SBATCH --partition=all
 
-source /home/andyjalloh/anaconda3/etc/profile.d/conda.sh
+source ~/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
 cd /home/andyjalloh/INFO8010-1_Project/project/code/src/ball_tracking/

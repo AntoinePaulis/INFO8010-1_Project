@@ -50,14 +50,14 @@ def compute_ball_metrics(pred, y, threshold=7):
     return tp, fp, fn, tn
 
 def criterionCrossEntropy(pred, y):
-    # Page 8 - TrackeNet paper
+    # Page 8 - TrackNet paper
     y = (y * 255).squeeze(1).long()   # (B, H, W)
 
     loss = nn.CrossEntropyLoss()(pred, y)
 
     return loss
 
-# Default value of gamme=2 based on the focal loss paper - page 5
+# Default value of gamma=2 based on the focal loss paper - page 5
 def criterionFocalLoss(pred, y, gamma=2):
     y = (y * 255).squeeze(1).long()
     
@@ -68,18 +68,17 @@ def criterionFocalLoss(pred, y, gamma=2):
     return loss.mean()
 
 parameters = {
-    "optimizer" : "Cross-entropy loss",
+    "optimizer" : "Adam",
     "model" : "TrackNet",
     "num_workers" : 0,
-    "batch_size" : 4,
-    "train_coef" : 0.7,
-    "val_coef" : 0.15,
-    "criterion" : "Adam",
+    "batch_size" : 2, # was at 4, got out of memory warning
+    "train_coef" : 0.1, # lowered from 0.7 for speed purposes 
+    "val_coef" : 0.05,
+    "criterion" : "Cross-entropy loss",
     "learning_rate" : 0.01,
-    "num_eprochs" : 10,
+    "num_eprochs" : 1, # for testing purposes, will be set to 10 later on
     "nb_input_frame" : 3,
     "variance" : 10,
-    "split" : 0.7,
     "scheduler" : False,
     "weight_init" : "uniform", # uniform on the paper but probably updated
     "dropout" : False
@@ -108,8 +107,9 @@ run = wandb.init(
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 print(f'Using device: {device}')
 
+# hardcoding dropout to false and dropout_p = 0.2 for now, might change that later
 network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"],
-                   dropout=parameters["dropout"], dropout_p=parameters["dropout_p"])
+                   dropout=False, dropout_p=0.2) 
 network.to(device)
 
 if parameters["optimizer"] == "Adam":
@@ -125,9 +125,9 @@ if parameters["scheduler"] == True:
     
     
 trainSet = BallDataset(type="train", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                       nb_input_frames=parameters["nb_input_frame"],  variance=parameters["variance"], split=parameters["split"])
+                       nb_input_frames=parameters["nb_input_frame"],  variance=parameters["variance"])
 valSet = BallDataset(type="val", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                     nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], split=parameters["split"])
+                     nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"])
 
 trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=False, 
                          num_workers=parameters["num_workers"])
@@ -164,6 +164,10 @@ def train(num_epochs):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # Print progress every 100 batches
+            batch_idx = len(train_losses)
+            if batch_idx % 100 == 0:
+                print(f"Epoch {i} - Train batch {batch_idx}/{len(trainloader)} ({100*batch_idx/len(trainloader):.1f}%)")
 
         network.eval()
         with torch.no_grad():
@@ -186,6 +190,9 @@ def train(num_epochs):
                 FN += FN_i
                 
                 val_losses.append(loss)
+                batch_idx = len(val_losses)
+                if batch_idx % 50 == 0:
+                    print(f"Epoch {i} - Val batch {batch_idx}/{len(valloader)} ({100*batch_idx/len(valloader):.1f}%)")
 
         if parameters["scheduler"] == True:
             scheduler.step()
@@ -199,13 +206,13 @@ def train(num_epochs):
         val_avg_loss.append(epoch_val_loss)
         
         # number of good predictions over the total number
-        accuracy = (TP+TN)/(TP+TN+FP+FN)
+        accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
         # proportion of good predictions among all the positive predictions
-        precision = TP/(TP+FP)
+        precision = TP/(TP+FP) if (TP+FP) > 0 else 0.0
         # proportion of positives that are detected
-        recall = TP/(TP+FN)
+        recall = TP/(TP+FN) if (TP+FN) >0 else 0.0
         
-        f1 = 2*precision*recall/(precision+recall)
+        f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
         
         wandb.log({
             "epoch" : i + 1,

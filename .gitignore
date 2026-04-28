@@ -11,3 +11,6 @@ runs/
 # python stuff
 __pycache__/
 *.pyc
+
+# jobs stuff
+project/code/logs/
