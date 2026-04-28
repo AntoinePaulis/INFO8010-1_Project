@@ -8,7 +8,6 @@ import json
 import cv2
 from PIL import Image
 from sympy import Line, Point
-from dplit import split
 
 # Compute the intersection between the 2 diagonal lines of the court rectangle
 def generate_center(kps):
@@ -41,7 +40,7 @@ def generate_gaussian_heatmap(h, w, x_target, y_target, variance):
     heatmap = np.exp(-((x - x_target)**2 + (y - y_target)**2) / (2 * variance))
     return torch.from_numpy(heatmap).unsqueeze(0)
         
-def split(dataset, train=True, split=0.7):
+def split_dataset(dataset, train=True, split=0.7):
     sep = int(split * len(dataset))
     
     if train == True:
@@ -50,7 +49,7 @@ def split(dataset, train=True, split=0.7):
         return dataset[sep:]
 
 class CourtDataset(Dataset):
-    def __init__(self, root_dir="/scratch/users/andyjalloh/court_detection/data/", type="train", split=0.7, img_size=(640, 360), variance=10):
+    def __init__(self, root_dir="/scratch/users/andyjalloh/court_detection_github_dataset/", type="train", split=0.7, img_size=(640, 360), variance=10):
         super().__init__()
         self.root_dir = root_dir
         self.w, self.h = img_size
@@ -65,14 +64,19 @@ class CourtDataset(Dataset):
         self.path_images = os.path.join(self.root_dir, 'images')
         
         if type == "train":
+            print("type = train")
             with open(os.path.join(self.root_dir, 'data_train.json'), 'r') as file:
                 self.dataset = split(json.load(file), train=True)
         elif type == "val":
+            print("type = val")
             with open(os.path.join(self.root_dir, 'data_train.json'), 'r') as file:
                 self.dataset = split(json.load(file), train=False)
         elif type == "test":
+            print("type = test")
             with open(os.path.join(self.root_dir, 'data_val.json'), 'r') as file:
                 self.dataset = json.load(file)
+        else:
+            print("None of the initializing self.dataset cases passed, self.dataset inexisting")
 
         valid_dataset = []
 

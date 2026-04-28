@@ -19,7 +19,7 @@ def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): # To 
 
 
 class BallDataset(Dataset):
-    def __init__(self, type="train", train_coef=0.7, val_coef=0.15, root_dir="/scratch/users/andyjalloh/Dataset",
+    def __init__(self, type="train", train_coef=0.7, val_coef=0.15, root_dir="/scratch/users/andyjalloh/ball_tracking_kaggle_dataset/",
                  img_size=(640, 360), variance=10, nb_input_frames=3):
         """
         Args:
