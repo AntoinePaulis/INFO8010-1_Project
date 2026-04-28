@@ -76,8 +76,8 @@ parameters = {
     "train_coef" : 0.7, 
     "val_coef" : 0.15,
     "criterion" : "Cross-entropy loss",
-    "learning_rate" : 0.01,
-    "num_eprochs" : 5, # for testing purposes, will be set to 10 later on
+    "learning_rate" : 0.001,
+    "num_eprochs" : 10, # for testing purposes, will be set to 10 later on
     "nb_input_frame" : 3,
     "variance" : 10,
     "scheduler" : False,
