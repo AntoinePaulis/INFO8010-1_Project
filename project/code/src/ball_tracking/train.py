@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from dataloader import BallDataset
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 
 # Claude generated
 def compute_ball_metrics(pred, y, threshold=7):
@@ -72,16 +73,17 @@ parameters = {
     "model" : "TrackNet",
     "num_workers" : 0,
     "batch_size" : 2, # was at 4, got out of memory warning
-    "train_coef" : 0.1, # lowered from 0.7 for speed purposes 
-    "val_coef" : 0.05,
+    "train_coef" : 0.7, 
+    "val_coef" : 0.15,
     "criterion" : "Cross-entropy loss",
     "learning_rate" : 0.01,
-    "num_eprochs" : 1, # for testing purposes, will be set to 10 later on
+    "num_eprochs" : 5, # for testing purposes, will be set to 10 later on
     "nb_input_frame" : 3,
     "variance" : 10,
     "scheduler" : False,
     "weight_init" : "uniform", # uniform on the paper but probably updated
-    "dropout" : False
+    "dropout" : False,
+    "save_every": 2 # every x epochs checkpoint for saving weights
 }
 
 if parameters["criterion"] == "Focal loss":
@@ -229,7 +231,12 @@ def train(num_epochs):
         })
         
         print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
-        
+
+        if i+1 % parameters["save_every"]:
+            os.makedirs('../../models', exist_ok=True)
+            torch.save(network.state_dict(), '../../models/tracknet_ball.pth')
+            print(f"Saved checkpoint at epoch number {i+1}")
+
     return train_avg_loss, val_avg_loss
 
 train_avg_loss, val_avg_loss = train(parameters["num_eprochs"])
