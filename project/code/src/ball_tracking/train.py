@@ -76,9 +76,9 @@ parameters = {
     "batch_size" : 2, # was at 4, got out of memory warning
     "train_coef" : 0.7, 
     "val_coef" : 0.15,
-    "criterion" : "Focal Loss",
+    "criterion" : "Focal loss",
     "learning_rate" : 0.001,
-    "num_eprochs" : 10, # for testing purposes, will be set to 10 later on
+    "num_epochs" : 10, # for testing purposes, will be set to 10 later on
     "nb_input_frame" : 3,
     "variance" : 10,
     "scheduler" : False,
@@ -242,4 +242,4 @@ def train(num_epochs):
     
     return train_avg_loss, val_avg_loss
 
-train_avg_loss, val_avg_loss = train(parameters["num_eprochs"])
+train_avg_loss, val_avg_loss = train(parameters["num_epochs"])
