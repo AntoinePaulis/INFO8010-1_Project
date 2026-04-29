@@ -6,6 +6,7 @@ from dataloader import BallDataset
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+from datetime import datetime
 
 # Claude generated
 def compute_ball_metrics(pred, y, threshold=7):
@@ -75,7 +76,7 @@ parameters = {
     "batch_size" : 2, # was at 4, got out of memory warning
     "train_coef" : 0.7, 
     "val_coef" : 0.15,
-    "criterion" : "Cross-entropy loss",
+    "criterion" : "Focal Loss",
     "learning_rate" : 0.001,
     "num_eprochs" : 10, # for testing purposes, will be set to 10 later on
     "nb_input_frame" : 3,
@@ -232,11 +233,13 @@ def train(num_epochs):
         
         print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
 
-        if i+1 % parameters["save_every"]:
-            os.makedirs('../../models', exist_ok=True)
-            torch.save(network.state_dict(), '../../models/tracknet_ball.pth')
-            print(f"Saved checkpoint at epoch number {i+1}")
-
+        if i+1 % parameters["save_every"] == 0:
+            os.makedirs('../../models/ball_tracking', exist_ok=True)
+            timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
+            filename = f'tracknet_ball_epoch{i+1}_{timestamp}.pth'
+            torch.save(network.state_dict(), f'../../models/ball_tracking/{filename}')
+            print(f"Saved checkpoint: {filename}")
+    
     return train_avg_loss, val_avg_loss
 
 train_avg_loss, val_avg_loss = train(parameters["num_eprochs"])
