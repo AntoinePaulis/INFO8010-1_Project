@@ -69,78 +69,7 @@ def criterionFocalLoss(pred, y, gamma=2):
     
     return loss.mean()
 
-parameters = {
-    "optimizer" : "Adam",
-    "model" : "TrackNet",
-    "num_workers" : 0,
-    "batch_size" : 2, # was at 4, got out of memory warning
-    "train_coef" : 0.7, 
-    "val_coef" : 0.15,
-    "criterion" : "Focal loss",
-    "learning_rate" : 0.001,
-    "num_epochs" : 10, # for testing purposes, will be set to 10 later on
-    "nb_input_frame" : 3,
-    "variance" : 10,
-    "scheduler" : False,
-    "weight_init" : "uniform", # uniform on the paper but probably updated
-    "dropout" : False,
-    "save_every": 2 # every x epochs checkpoint for saving weights
-}
-
-if parameters["criterion"] == "Focal loss":
-    parameters["gamma_loss"] = 2
-
-if parameters["optimizer"] == "AdamW":
-    parameters["weight_decay"] = 1e-4
-
-if parameters["scheduler"]:
-    parameters["gamma_scheduler"] = 0.1
-    parameters["step_size_scheduler"] = 5
-
-if parameters["dropout"]:
-    parameters["dropout_p"] = 0.2
-
-run = wandb.init(
-    entity="uliege-tennis-tracking",
-    project="ball-tracking",
-    name="TrackNet_test",
-    config=parameters
-)
-
-device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-print(f'Using device: {device}')
-
-# hardcoding dropout to false and dropout_p = 0.2 for now, might change that later
-network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"],
-                   dropout=False, dropout_p=0.2) 
-network.to(device)
-
-if parameters["optimizer"] == "Adam":
-    optimizer = torch.optim.Adam(network.parameters(), lr=parameters["learning_rate"])
-elif parameters["optimizer"] == "AdamW":
-    optimizer = torch.optim.AdamW(network.parameters(), lr=parameters["learning_rate"], 
-                                  weight_decay=parameters["weight_decay"])
-
-# Improvement is to trigger the scheduler only when the validation loss stops improving
-if parameters["scheduler"] == True:
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=parameters["step_size_scheduler"],
-        gamma=parameters["gamma_scheduler"])
-    
-    
-trainSet = BallDataset(type="train", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                       nb_input_frames=parameters["nb_input_frame"],  variance=parameters["variance"])
-valSet = BallDataset(type="val", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                     nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"])
-
-trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=False, 
-                         num_workers=parameters["num_workers"])
-valloader = DataLoader(valSet, batch_size=parameters["batch_size"], shuffle=False, 
-                        num_workers=parameters["num_workers"])
-
-print(f"\nTrain size: {len(trainloader)}, Test size: {len(valloader)}")
-
 # From homework 2
-
 def train(num_epochs):
     train_avg_loss = []
     val_avg_loss = []
@@ -242,4 +171,84 @@ def train(num_epochs):
     
     return train_avg_loss, val_avg_loss
 
-train_avg_loss, val_avg_loss = train(parameters["num_epochs"])
+if __name__ == "__main__":
+    parameters = {
+        "optimizer" : "Adam",
+        "model" : "TrackNet",
+        "num_workers" : 0,
+        "batch_size" : 2, # was at 4, got out of memory warning
+        "frame" : "last",
+        "train_coef" : 0.7, 
+        "val_coef" : 0.15,
+        "criterion" : "Focal loss",
+        "learning_rate" : 0.001,
+        "num_epochs" : 10, # for testing purposes, will be set to 10 later on
+        "nb_input_frame" : 3,
+        "variance" : 10,
+        "scheduler" : False,
+        "weight_init" : "uniform", # uniform on the paper but probably updated
+        "dropout" : False,
+        "save_every": 2, # every x epochs checkpoint for saving weights
+        "shuffle" : False,
+        "loading" : True
+    }
+
+    if parameters["criterion"] == "Focal loss":
+        parameters["gamma_loss"] = 2
+
+    if parameters["optimizer"] == "AdamW":
+        parameters["weight_decay"] = 1e-4
+
+    if parameters["scheduler"]:
+        parameters["gamma_scheduler"] = 0.1
+        parameters["step_size_scheduler"] = 5
+
+    if parameters["dropout"]:
+        parameters["dropout_p"] = 0.2
+
+    if parameters["loading"]:
+        parameters["loading_path"] = "../../models/ball_tracking/tracknet_ball_epoch30_30042026_03h28m14s.pth"
+    
+    run = wandb.init(
+        entity="uliege-tennis-tracking",
+        project="ball-tracking",
+        name="TrackNet_test",
+        config=parameters
+    )
+
+    device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+    print(f'Using device: {device}')
+
+    # hardcoding dropout to false and dropout_p = 0.2 for now, might change that later
+    network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"],
+                    dropout=False, dropout_p=0.2) 
+    network.to(device)
+
+    if parameters["loading"] == True:
+        network.load_state_dict(torch.load(parameters["loading_path"], map_location=device))
+        print(f"Loaded weights from: {parameters['loading_path']}")
+    
+    if parameters["optimizer"] == "Adam":
+        optimizer = torch.optim.Adam(network.parameters(), lr=parameters["learning_rate"])
+    elif parameters["optimizer"] == "AdamW":
+        optimizer = torch.optim.AdamW(network.parameters(), lr=parameters["learning_rate"], 
+                                    weight_decay=parameters["weight_decay"])
+
+    # Improvement is to trigger the scheduler only when the validation loss stops improving
+    if parameters["scheduler"] == True:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=parameters["step_size_scheduler"],
+            gamma=parameters["gamma_scheduler"])
+        
+    trainSet = BallDataset(type="train", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
+                        nb_input_frames=parameters["nb_input_frame"],  variance=parameters["variance"], frame=parameters["frame"])
+    valSet = BallDataset(type="val", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
+                        nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"])
+
+    trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
+                            num_workers=parameters["num_workers"])
+    valloader = DataLoader(valSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
+                            num_workers=parameters["num_workers"])
+
+    print(f"\nTrain size: {len(trainloader)}, Test size: {len(valloader)}")
+
+    train_avg_loss, val_avg_loss = train(parameters["num_epochs"])

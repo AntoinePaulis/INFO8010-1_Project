@@ -15,6 +15,6 @@
 source /home/andyjalloh/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
-cd /home/andyjalloh/INFO8010-1_Project/project/code/src/court_detection/
+cd /home/andyjalloh/antoine/INFO8010-1_Project/project/code/src/court_detection/
 
 python train.py
