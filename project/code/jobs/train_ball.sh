@@ -15,6 +15,6 @@
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
-cd /home/andyjalloh/INFO8010-1_Project/project/code/src/ball_tracking/
+cd /home/andyjalloh/andy/INFO8010-1_Project/project/code/src/ball_tracking/
 
 python train.py
