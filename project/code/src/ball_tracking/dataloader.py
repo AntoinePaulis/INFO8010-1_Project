@@ -6,10 +6,11 @@ from torchvision import transforms
 import torch
 from PIL import Image
 
-def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): # To check because Claude-generated
+def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): 
     """Generate a 2D Gaussian heatmap at position (cx, cy)."""
     heatmap = np.zeros((h, w), dtype=np.float32)
-    if visibility == False:
+    print(f"visibility = {visibility}")
+    if visibility == 0 or visibility == 3:
         return heatmap
     x = np.arange(0, w, 1, np.float32)
     y = np.arange(0, h, 1, np.float32)
@@ -78,6 +79,8 @@ class BallDataset(Dataset):
                         x = float(df.iloc[i]["x-coordinate"]) * self.w / 1280.0
                         y = float(df.iloc[i]["y-coordinate"]) * self.h / 720.0
                         self.dataset.append((list_img_path, x, y, df.iloc[i]["visibility"]))
+                        self.dataset.append((list_img_path, x, y, df.iloc[i]["visibility"]))
+                        
                 elif frame == "last":
                     for i in range(self.nb_input_frames - 1, len(df)):
                         list_img_path = []
