@@ -13,9 +13,13 @@ def compute_ball_metrics(pred, y, threshold=7):
     """
     pred : (B, 256, H, W) - raw logits from TrackNet (256 classes)
     y    : (B, 1, H, W)   - normalized heatmap [0,1]
+    tp   : the ball centroid was correctly predicted withing [threshold] pixels of error
+    fp   : the ball centroid was predicted with > [threshold] pixels of error
+    fn   : no ball/more than one ball was predicted where there was exactly one ball
+    tn   : no ball predicted, where there was no ball (never the case in our dataset, tn should always be 0)
     """
     B, _, H, W = pred.shape
-    tp, fp, fn, tn = 0, 0, 0, 0
+    tp, fp, tn, fn = 0, 0, 0, 0
 
     # Convert pred logits to class indices (0-255), then normalize back
     pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
@@ -49,7 +53,7 @@ def compute_ball_metrics(pred, y, threshold=7):
                 fp += 1
                 fn += 1
 
-    return tp, fp, fn, tn
+    return tp, fp, tn, fn
 
 def criterionCrossEntropy(pred, y):
     # Page 8 - TrackNet paper
@@ -77,32 +81,36 @@ def train(num_epochs):
     for i in range(num_epochs):
         train_losses = []
         val_losses = []
-        network.train()
+        network.train() # enable batchnorm/dropout
         TP, TN, FP, FN = 0, 0, 0, 0
         
         for x, y in trainloader:
+            # moving inputs, outputs to GPU
             x = x.to(device)
             y = y.to(device)
             
-            pred = network(x)
+            pred = network(x) # forward pass
             
             if parameters["criterion"] == "Cross-entropy loss":
                 loss = criterionCrossEntropy(pred, y)
             elif parameters["criterion"] == "Focal loss":
                 loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
             
-            train_losses.append(loss.detach())
+            train_losses.append(loss.detach()) # tracking losses, for avg
 
+            # removing prev. gradients, computing new ones, updating weights
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            
             # Print progress every 100 batches
             batch_idx = len(train_losses)
             if batch_idx % 100 == 0:
                 print(f"Epoch {i} - Train batch {batch_idx}/{len(trainloader)} ({100*batch_idx/len(trainloader):.1f}%)")
 
-        network.eval()
-        with torch.no_grad():
+        network.eval() # disable batchnorm/dropout
+        
+        with torch.no_grad(): # not computing gradients for val.
 
             for x, y in valloader:
                 x = x.to(device)
@@ -115,10 +123,10 @@ def train(num_epochs):
                 elif parameters["criterion"] == "Focal loss":
                     loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
 
-                TP_i, TN_i, FP_i, FN_i = compute_ball_metrics(pred, y)
+                TP_i, FP_i, TN_i, FN_i = compute_ball_metrics(pred, y)
                 TP += TP_i
-                TN += TN_i
                 FP += FP_i
+                TN += TN_i
                 FN += FN_i
                 
                 val_losses.append(loss)
@@ -127,7 +135,7 @@ def train(num_epochs):
                     print(f"Epoch {i} - Val batch {batch_idx}/{len(valloader)} ({100*batch_idx/len(valloader):.1f}%)")
 
         if parameters["scheduler"] == True:
-            scheduler.step()
+            scheduler.step() # adjusting learning rate
         
         lr = optimizer.param_groups[0]["lr"] # Because can change with the scheduler
         
@@ -137,12 +145,14 @@ def train(num_epochs):
         train_avg_loss.append(epoch_train_loss)
         val_avg_loss.append(epoch_val_loss)
         
-        # number of good predictions over the total number
-        accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
         # proportion of good predictions among all the positive predictions
         precision = TP/(TP+FP) if (TP+FP) > 0 else 0.0
         # proportion of positives that are detected
         recall = TP/(TP+FN) if (TP+FN) >0 else 0.0
+
+        # no such thing as a true negative in a 
+        # dataset where the ball is always in 
+        # the frame (sometimes invisible)
         
         f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
         
@@ -156,8 +166,8 @@ def train(num_epochs):
             "val/f1" : f1,
             "val/TP" : TP,
             "val/FP" : FP,
-            "val/FN" : FN,
             "val/TN" : TN,
+            "val/FN" : FN,
         })
         
         print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
@@ -220,8 +230,7 @@ if __name__ == "__main__":
     print(f'Using device: {device}')
 
     # hardcoding dropout to false and dropout_p = 0.2 for now, might change that later
-    network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"],
-                    dropout=False, dropout_p=0.2) 
+    network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"]) 
     network.to(device)
 
     if parameters["loading"] == True:
