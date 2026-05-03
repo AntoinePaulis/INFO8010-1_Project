@@ -3,7 +3,8 @@ import wandb
 from model import TrackNet
 from dataloader import BallDataset
 from torch.utils.data import DataLoader
-from train import compute_ball_metrics
+from train import compute_ball_metrics, criterionFocalLoss
+from datetime import datetime
 
 parameters = {
     "weight_init" : "uniform",
@@ -13,22 +14,27 @@ parameters = {
     "shuffle" : False,
     "num_workers" : 0,
     "batch_size" : 2,
+    "loading_file" : "tracknet_ball_epoch30_30042026_03h28m14s.pth",
+    "gamma_loss" : 2
 }
+
+timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
 
 run = wandb.init(
     entity="uliege-tennis-tracking",
     project="ball-tracking",
-    name="TrackNet_inference",
+    name=f"TrackNet_inference_{timestamp}",
     config=parameters
 )
 
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+print(f'Using device: {device}')
 
 network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frames"], 
                    dropout=parameters["dropout"], dropout_p=parameters["dropout_p"])
 network.to(device)
 
-loading_path = "../../models/ball_tracking/tracknet_ball_epoch30_30042026_03h28m14s.pth"
+loading_path = f"../../models/ball_tracking/{parameters['loading_file']}"
 network.load_state_dict(torch.load(loading_path, map_location=device))
 
 network.eval()
@@ -38,18 +44,34 @@ testSet = BallDataset(type="test", train_coef=0.7, val_coef=0.15,
 testloader = DataLoader(testSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
                         num_workers=parameters["num_workers"])
 
+print(f"\nTest size: {len(testloader)}")
+
 TP, TN, FP, FN = 0, 0, 0, 0
+
+test_losses = []
 
 with torch.no_grad():
     for x, y in testloader:
         x = x.to(device)
         y = y.to(device)
         pred = network(x)
+        
+        loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
+        
+        test_losses.append(loss.detach())
+        
         TP_i, FP_i, FN_i, TN_i = compute_ball_metrics(pred, y)
         TP += TP_i
         FP += FP_i
         FN += FN_i
         TN += TN_i
+        
+        # Print progress every 100 batches
+        batch_idx = len(test_losses)
+        if batch_idx % 100 == 0:
+            print(f"Test batch {batch_idx}/{len(testloader)} ({100*batch_idx/len(testloader):.1f}%)")
+
+test_loss = torch.mean(torch.tensor(test_losses))
 
 # number of good predictions over the total number
 accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
@@ -60,18 +82,22 @@ recall = TP/(TP+FN) if (TP+FN) >0 else 0.0
 
 f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
 
+print(f"test_loss = {test_loss}")
 print(f"accuracy = {accuracy} , precision = {precision} , recall = {recall} and f1 = {f1}")
 print(f"TP = {TP} , FP = {FP} , FN = {FN} and TN = {TN}")
 
+
+
 wandb.log({
-    "test/accuracy"  : accuracy,
+    "test_loss" : test_loss,
+    "test/accuracy" : accuracy,
     "test/precision" : precision,
-    "test/recall"    : recall,
-    "test/f1"        : f1,
-    "test/TP"        : TP,
-    "test/FP"        : FP,
-    "test/FN"        : FN,
-    "test/TN"        : TN,
+    "test/recall" : recall,
+    "test/f1" : f1,
+    "test/TP" : TP,
+    "test/FP" : FP,
+    "test/FN" : FN,
+    "test/TN" : TN,
 })
 
 wandb.finish()

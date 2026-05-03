@@ -115,7 +115,7 @@ def train(num_epochs):
                 elif parameters["criterion"] == "Focal loss":
                     loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
 
-                TP_i, TN_i, FP_i, FN_i = compute_ball_metrics(pred, y)
+                TP_i, FP_i, FN_i, TN_i = compute_ball_metrics(pred, y)
                 TP += TP_i
                 TN += TN_i
                 FP += FP_i
@@ -151,6 +151,7 @@ def train(num_epochs):
             "train_loss" : epoch_train_loss,
             "val_loss" : epoch_val_loss,
             "learning_rate" : lr,
+            "val/accuracy" : accuracy,
             "val/precision" : precision,
             "val/recall" : recall,
             "val/f1" : f1,
@@ -209,10 +210,12 @@ if __name__ == "__main__":
     if parameters["loading"]:
         parameters["loading_path"] = "../../models/ball_tracking/tracknet_ball_epoch30_30042026_03h28m14s.pth"
     
+    timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
+    
     run = wandb.init(
         entity="uliege-tennis-tracking",
         project="ball-tracking",
-        name="TrackNet_test",
+        name=f"TrackNet_{timestamp}",
         config=parameters
     )
 
