@@ -84,7 +84,7 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
     
     parameters ={
-        "root_dir" : "scratch/users/andyjalloh/cointe_dataset/",
+        "dataset_dir" : "scratch/users/andyjalloh/cointe_dataset/",
         "weight_init" : "uniform",
         "nb_input_frames" : 3,
         "dropout" : False,
@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
     network.eval()
     
-    prediSet = BallDatasetPrediction(root_dir=parameters["root_dir"])
+    prediSet = BallDatasetPrediction(root_dir=parameters["dataset_dir"])
     
     prediloader = DataLoader(prediSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
                         num_workers=parameters["num_workers"])
@@ -144,10 +144,11 @@ if __name__ == "__main__":
                     "x" : x_pred,
                     "y" : y_pred,
                 })
-                
-    for (game, clip), records in dict.items():
-        save_dir = os.path.join(output_dir, game, clip)
-        os.makedirs(save_dir, exist_ok=True)
-        df = pd.DataFrame(records)
-        df.to_csv(os.path.join(save_dir, "predictions.csv"), index=False)
-        print(f"Saved {len(records)} predictions → {save_dir}/predictions.csv")
+    
+    # Save in a csv for each clip and in the same structure of the dataset       
+    for (game, clip), value in dict.items():
+        output_dir = os.path.join(output_dir, game, clip)
+        os.makedirs(output_dir, exist_ok=True)
+        df = pd.DataFrame(value)
+        df.to_csv(os.path.join(output_dir, "predictions.csv"), index=False)
+        print(f"Saved {len(value)} predictions in {output_dir}/predictions.csv")

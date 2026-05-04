@@ -84,7 +84,7 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
     
     parameters ={
-        "root_dir" : "scratch/users/andyjalloh/cointe_dataset/",
+        "dataset_dir" : "scratch/users/andyjalloh/cointe_dataset/",
         "weight_init" : "uniform",
         "dropout" : False,
         "dropout_p" : 0.2 ,
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     network.eval()
 
-    prediSet = BallDatasetPrediction(root_dir=parameters["root_dir"])
+    prediSet = BallDatasetPrediction(root_dir=parameters["dataset_dir"])
     
     prediloader = DataLoader(prediSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
                         num_workers=parameters["num_workers"])
@@ -123,5 +123,31 @@ if __name__ == "__main__":
     with torch.no_grad():
         for x, img_names, games, clips in prediloader:
             x = x.to(device)
-            pred = network(x)
-            #...
+            pred = network(x) # (B, 15, H, W)
+            
+            B, nb_kps, _, W = pred.shape
+
+            for b in range(B):
+                row = {"img_name": img_names[b]}
+
+                for k in range(nb_kps):
+                    
+                    pred_idx = torch.argmax(pred[b, k])
+                    # y = int(idx /W) and x = idx % W
+                    y_pred, x_pred = divmod(pred_idx.item(), W)
+                    row[f"kp{k}_x"] = x_pred
+                    row[f"kp{k}_y"] = y_pred
+
+                key = (games[b], clips[b])
+                if key not in dict:
+                    dict[key] = []
+                
+                dict[key].append(row)
+
+    # Save in a csv for each clip and in the same structure of the dataset  
+    for (game, clip), value in dict.items():
+        output_dir = os.path.join(output_dir, game, clip)
+        os.makedirs(output_dir, exist_ok=True)
+        df = pd.DataFrame(value)
+        df.to_csv(os.path.join(output_dir, "predictions.csv"), index=False)
+        print(f"Saved {len(value)} predictions in {output_dir}/predictions.csv")
