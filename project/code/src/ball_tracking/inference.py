@@ -70,6 +70,7 @@ with torch.no_grad():
         
         test_losses.append(loss.detach())
         
+        print(f"Batch shapes - x: {x.shape}, y: {y.shape}, pred: {pred.shape}")
         TP_i, FP_i, TN_i, FN_i, multiple_balls = compute_ball_metrics(pred, y)
         TP += TP_i
         FP += FP_i

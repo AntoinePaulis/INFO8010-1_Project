@@ -5,7 +5,7 @@ ENV = os.environ.get("PROJECT_ENV", "local")
 # redirecting towards the alan location for the raw data
 if ENV == "alan":
     DATA_RAW = "/scratch/users/andyjalloh/Dataset" 
-    OUTPUTS_DIR = "/home/users/andyjalloh/andy/INFO8010-1_Project/project/outputs"
+    OUTPUTS_DIR = "/home/andyjalloh/andy/INFO8010-1_Project/project/outputs"
 else:
     DATA_RAW = "data/raw"
     OUTPUTS_DIR = "outputs"

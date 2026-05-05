@@ -51,8 +51,8 @@ def compute_ball_metrics(pred, y, threshold=5):
         detected_balls = []
         if circles is not None:
             circles = np.round(circles[0, :]).astype(int)
-            for (x, y, r) in circles:
-                detected_balls.append((x, y))
+            for (x_c, y_c, r) in circles:
+                detected_balls.append((x_c, y_c))
         
         num_detections = len(detected_balls)
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
         "val_coef" : 0.15,
         "criterion" : "Focal loss",
         "learning_rate" : 0.001,
-        "num_epochs" : 10, # for testing purposes, will be set to 10 later on
+        "num_epochs" : 10, 
         "nb_input_frame" : 3,
         "variance" : 10,
         "scheduler" : False,
