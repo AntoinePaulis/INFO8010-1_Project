@@ -15,6 +15,6 @@
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
-cd /home/andyjalloh/antoine/INFO8010-1_Project/project/code/src/player_tracking/
+cd /home/andyjalloh/andy/INFO8010-1_Project/project/code/src/player_tracking/
 
 python prediction.py
