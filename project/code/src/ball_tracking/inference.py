@@ -50,7 +50,7 @@ testloader = DataLoader(testSet, batch_size=parameters["batch_size"], shuffle=pa
 
 print(f"\nTest size: {len(testloader)}")
 
-TP, TN, FP, FN = 0, 0, 0, 0
+TP, FP, TN, FN = 0, 0, 0, 0
 
 test_losses = []
 
