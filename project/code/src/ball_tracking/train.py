@@ -7,16 +7,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from datetime import datetime
+import cv2
+import numpy as np
 
-# Claude generated
-def compute_ball_metrics(pred, y, threshold=7):
+def compute_ball_metrics(pred, y, threshold=5):
     """
     pred : (B, 256, H, W) - raw logits from TrackNet (256 classes)
     y    : (B, 1, H, W)   - normalized heatmap [0,1]
     tp   : the ball centroid was correctly predicted withing [threshold] pixels of error
     fp   : the ball centroid was predicted with > [threshold] pixels of error
     fn   : no ball/more than one ball was predicted where there was exactly one ball
-    tn   : no ball predicted, where there was no ball (never the case in our dataset, tn should always be 0)
+    tn   : no ball predicted, where there was no ball 
     """
     B, _, H, W = pred.shape
     tp, fp, tn, fn = 0, 0, 0, 0
@@ -24,36 +25,68 @@ def compute_ball_metrics(pred, y, threshold=7):
     # Convert pred logits to class indices (0-255), then normalize back
     pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
 
-    for b in range(B):
-        true_heatmap = y[b, 0]          # (H, W)
-        pred_heatmap = pred_class[b].float() / 255.0  # (H, W)
+    multiple_balls = 0
 
-        ball_visible = true_heatmap.max() > 0.01
+    for b in range(B):
+        true_heatmap = y[b, 0] # (H, W)
+        pred_heatmap = pred_class[b].float().cpu().numpy().astype(np.uint8) # Hough is cpu-only
+
+        ball_visible = true_heatmap.max() > 0.01 # true for vc = 1 or 2
+
+        # binarize prediction at threshold 128 (Tracknet paper - page 8)
+        binary_pred = np.where(pred_heatmap >= 128, 255, 0).astype(np.uint8)
+        
+        # Hough circle detection
+        circles = cv2.HoughCircles(
+            binary_pred,
+            cv2.HOUGH_GRADIENT,
+            dp=1, # keeping same img resolution
+            minDist=20, # min distance between circles
+            param1=50,
+            param2=10, # lower = more circles detected
+            minRadius=2, # ball is ~2-12px
+            maxRadius=12
+        )
+
+        detected_balls = []
+        if circles is not None:
+            circles = np.round(circles[0, :]).astype(int)
+            for (x, y, r) in circles:
+                detected_balls.append((x, y))
+        
+        num_detections = len(detected_balls)
 
         if not ball_visible:
             # Ball is invisible — good prediction = near-zero heatmap
-            if pred_heatmap.max() < 0.01:
+            if num_detections == 0:
                 tn += 1   # correctly predicted no ball
             else:
-                fp += 1   # predicted a ball that doesn't exist
+                fp += 1   # incorrectly predicted ball(s)
         else:
-            # Ball is visible — check if predicted position is close enough
-            true_idx = torch.argmax(true_heatmap)
-            pred_idx = torch.argmax(pred_heatmap)
-
-            true_y_coord, true_x_coord = divmod(true_idx.item(), W)
-            pred_y_coord, pred_x_coord = divmod(pred_idx.item(), W)
-
-            dist = ((pred_x_coord - true_x_coord)**2 + 
-                    (pred_y_coord - true_y_coord)**2) ** 0.5
-
-            if dist < threshold:
-                tp += 1
+            # Ball is visible — check if exactly on ball predicted & position close enough
+            if num_detections == 0:
+                fn += 1 # failed to detect the ball
+            
+            elif num_detections > 1:
+                fn += 1 # detected several balls (wrong)
+                multiple_balls += 1
             else:
-                fp += 1
-                fn += 1
+                # exactly one ball: check distance
+                true_idx = torch.argmax(true_heatmap)
+                true_y_coord, true_x_coord = divmod(true_idx.item(), W)
 
-    return tp, fp, tn, fn
+                pred_x, pred_y = detected_balls[0]
+
+                # euclidean distance of the ball centroids
+                dist = ((pred_x - true_x_coord)**2 + 
+                        (pred_y - true_y_coord)**2) ** 0.5
+
+                if dist < threshold:
+                    tp += 1
+                else:
+                    fp += 1
+
+    return tp, fp, tn, fn, multiple_balls
 
 def criterionCrossEntropy(pred, y):
     # Page 8 - TrackNet paper
@@ -77,12 +110,14 @@ def criterionFocalLoss(pred, y, gamma=2):
 def train(num_epochs):
     train_avg_loss = []
     val_avg_loss = []
+    total_multiple_balls = 0
 
     for i in range(num_epochs):
         train_losses = []
         val_losses = []
         network.train() # enable batchnorm/dropout
         TP, TN, FP, FN = 0, 0, 0, 0
+        multiple_balls = 0
         
         for x, y in trainloader:
             # moving inputs, outputs to GPU
@@ -123,11 +158,12 @@ def train(num_epochs):
                 elif parameters["criterion"] == "Focal loss":
                     loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
 
-                TP_i, FP_i, TN_i, FN_i = compute_ball_metrics(pred, y)
+                TP_i, FP_i, TN_i, FN_i, multiple_balls_i = compute_ball_metrics(pred, y)
                 TP += TP_i
                 FP += FP_i
                 TN += TN_i
                 FN += FN_i
+                multiple_balls += multiple_balls_i
                 
                 val_losses.append(loss)
                 batch_idx = len(val_losses)
@@ -149,12 +185,12 @@ def train(num_epochs):
         precision = TP/(TP+FP) if (TP+FP) > 0 else 0.0
         # proportion of positives that are detected
         recall = TP/(TP+FN) if (TP+FN) >0 else 0.0
-
-        # no such thing as a true negative in a 
-        # dataset where the ball is always in 
-        # the frame (sometimes invisible)
-        
+        # remember accuracy is skewed bc of dataset errors for tn
+        accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
+        # harmonic mean of precision and recall
         f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
+
+        total_multiple_balls += multiple_balls
         
         wandb.log({
             "epoch" : i + 1,
@@ -169,11 +205,13 @@ def train(num_epochs):
             "val/FP" : FP,
             "val/TN" : TN,
             "val/FN" : FN,
+            "val/multiple_balls_epoch" : multiple_balls,
+            "val/multiple_balls_total" : total_multiple_balls
         })
         
         print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
 
-        if i+1 % parameters["save_every"] == 0:
+        if (i+1) % parameters["save_every"] == 0:
             os.makedirs('../../models/ball_tracking', exist_ok=True)
             timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
             filename = f'tracknet_ball_epoch{i+1}_{timestamp}.pth'
@@ -201,7 +239,7 @@ if __name__ == "__main__":
         "dropout" : False,
         "save_every": 2, # every x epochs checkpoint for saving weights
         "shuffle" : False,
-        "loading" : True
+        "loading" : False
     }
 
     if parameters["criterion"] == "Focal loss":

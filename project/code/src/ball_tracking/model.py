@@ -51,8 +51,7 @@ class TrackNet(nn.Module):
             Block(in_channels=128, out_channels=64, dropout=dropout, dropout_p=dropout_p),
             Block(in_channels=64, out_channels=64, dropout=dropout, dropout_p=dropout_p),
             Block(in_channels=64, out_channels=256, dropout=dropout, dropout_p=dropout_p) # 256 = range of pixel
-            # nn.Softmax(dim=1), we get rid of it since we use cross-entropy
-            # The end will not fit the expected shape of the output.
+            # nn.Softmax(dim=1) # our losses already apply softmax
         )
         
         self._init_weights(weight_init = weight_init)

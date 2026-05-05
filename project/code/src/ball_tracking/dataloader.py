@@ -8,9 +8,7 @@ from PIL import Image
 
 def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance): 
     """Generate a 2D Gaussian heatmap at position (cx, cy)."""
-    print(visibility)
     heatmap = np.zeros((h, w), dtype=np.float32)
-    print(f"visibility = {visibility}")
     if visibility == 0 or visibility == 3:
         return heatmap
     x = np.arange(0, w, 1, np.float32)
