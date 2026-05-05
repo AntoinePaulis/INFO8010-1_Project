@@ -1,11 +1,9 @@
 import os
 import numpy as np
-import pandas as pd
 from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
 import json
-import cv2
 from PIL import Image
 from sympy import Line, Point
 
@@ -49,7 +47,8 @@ def split_dataset(dataset, train=True, split=0.7):
         return dataset[sep:]
 
 class CourtDataset(Dataset):
-    def __init__(self, root_dir="/scratch/users/andyjalloh/court_detection_github_dataset/", type="train", split=0.7, img_size=(640, 360), variance=10):
+    def __init__(self, root_dir="/scratch/users/andyjalloh/court_detection_github_dataset/", type="train", split=0.7, 
+                 img_size=(640, 360), variance=10):
         super().__init__()
         self.root_dir = root_dir
         self.w, self.h = img_size
@@ -66,32 +65,15 @@ class CourtDataset(Dataset):
         if type == "train":
             print("type = train")
             with open(os.path.join(self.root_dir, 'data_train.json'), 'r') as file:
-                self.dataset = split(json.load(file), train=True)
+                self.dataset = split_dataset(json.load(file), train=True)
         elif type == "val":
             print("type = val")
             with open(os.path.join(self.root_dir, 'data_train.json'), 'r') as file:
-                self.dataset = split(json.load(file), train=False)
+                self.dataset = split_dataset(json.load(file), train=False)
         elif type == "test":
             print("type = test")
             with open(os.path.join(self.root_dir, 'data_val.json'), 'r') as file:
                 self.dataset = json.load(file)
-        else:
-            print("None of the initializing self.dataset cases passed, self.dataset inexisting")
-
-        valid_dataset = []
-
-        for item in self.dataset:
-            img_file = item["id"] + ".png"
-            img_path = os.path.join(self.path_images, img_file)
-
-            img = cv2.imread(img_path)
-            if img is None:
-                print(f"[WARNING] Removing corrupted image: {img_path}")
-            else:
-                valid_dataset.append(item)
-        
-        print(f"Valid images: {len(valid_dataset)} / {len(self.dataset)}")
-        self.dataset = valid_dataset
         
     def __len__(self):
         return len(self.dataset)

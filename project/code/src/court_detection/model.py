@@ -20,7 +20,7 @@ class Block(nn.Module):
         x = self.net(x)
         if self.dropout:
             x = self.dropout(x)
-        return
+        return x
 
 class TrackNetCourt(nn.Module):
     def __init__(self, weight_init,dropout=False, dropout_p=0.2):
