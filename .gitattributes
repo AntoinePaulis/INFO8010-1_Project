@@ -1,2 +1,2 @@
 project/code/jobs/*.sh merge=ours
-
+project/code/src/config.py merge=ours
