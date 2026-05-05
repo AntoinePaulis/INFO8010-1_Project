@@ -5,6 +5,10 @@ from dataloader import BallDataset
 from torch.utils.data import DataLoader
 from train import compute_ball_metrics, criterionFocalLoss
 from datetime import datetime
+import sys
+sys.path.append('..')
+from config import OUTPUTS_DIR
+import os
 
 parameters = {
     "weight_init" : "uniform",
@@ -50,7 +54,13 @@ TP, TN, FP, FN = 0, 0, 0, 0
 
 test_losses = []
 
+# Storage for predictions
+all_predictions = []
+all_ground_truths = []
+all_dataset_indices = []
+
 with torch.no_grad():
+    batch_start_idx = 0
     for x, y in testloader:
         x = x.to(device)
         y = y.to(device)
@@ -60,13 +70,23 @@ with torch.no_grad():
         
         test_losses.append(loss.detach())
         
-        TP_i, FP_i, FN_i, TN_i = compute_ball_metrics(pred, y)
+        TP_i, FP_i, FN_i, TN_i, multiple_balls = compute_ball_metrics(pred, y)
         TP += TP_i
         FP += FP_i
         FN += FN_i
         TN += TN_i
         
-        # Print progress every 100 batches
+        # Save predictions (claude)
+        pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
+        all_predictions.append(pred_class.cpu())
+        all_ground_truths.append(y.cpu())
+        
+        # Track which dataset indices these correspond to (claude)
+        batch_size = x.shape[0]
+        all_dataset_indices.extend(range(batch_start_idx, batch_start_idx + batch_size))
+        batch_start_idx += batch_size
+
+        # Print progress every 100 batches 
         batch_idx = len(test_losses)
         if batch_idx % 100 == 0:
             print(f"Test batch {batch_idx}/{len(testloader)} ({100*batch_idx/len(testloader):.1f}%)")
@@ -99,5 +119,27 @@ wandb.log({
     "test/FN" : FN,
     "test/TN" : TN,
 })
+
+# Save predictions to disk
+predictions_dir = os.path.join(OUTPUTS_DIR, "ball_tracking", "predictions")
+os.makedirs(predictions_dir, exist_ok=True)
+
+predictions_file = os.path.join(predictions_dir, f"predictions_{timestamp}.pt")
+torch.save({
+    'predictions': torch.cat(all_predictions, dim=0),  # (N, H, W)
+    'ground_truths': torch.cat(all_ground_truths, dim=0),  # (N, 1, H, W)
+    'dataset_indices': all_dataset_indices,
+    'model_file': parameters['loading_file'],
+    'timestamp': timestamp,
+    'metrics': {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1,
+        'TP': TP, 'FP': FP, 'FN': FN, 'TN': TN
+    }
+}, predictions_file)
+
+print(f"\nSaved predictions to: {predictions_file}")
 
 wandb.finish()
