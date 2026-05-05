@@ -123,11 +123,7 @@ def train(num_epochs):
                 elif parameters["criterion"] == "Focal loss":
                     loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
 
-<<<<<<< HEAD
                 TP_i, FP_i, TN_i, FN_i = compute_ball_metrics(pred, y)
-=======
-                TP_i, FP_i, FN_i, TN_i = compute_ball_metrics(pred, y)
->>>>>>> Antoine
                 TP += TP_i
                 FP += FP_i
                 TN += TN_i
