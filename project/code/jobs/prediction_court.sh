@@ -9,7 +9,7 @@
 #SBATCH --output=../logs/prediction_court_%j.out
 #SBATCH --error=../logs/prediction_court_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=antoine.paulis@student.uliege.be
+#SBATCH --mail-user=andy.jalloh@student.uliege.be
 #SBATCH --partition=all
 
 source ~/anaconda3/etc/profile.d/conda.sh
