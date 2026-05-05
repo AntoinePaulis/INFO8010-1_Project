@@ -70,11 +70,11 @@ with torch.no_grad():
         
         test_losses.append(loss.detach())
         
-        TP_i, FP_i, FN_i, TN_i, multiple_balls = compute_ball_metrics(pred, y)
+        TP_i, FP_i, TN_i, FN_i, multiple_balls = compute_ball_metrics(pred, y)
         TP += TP_i
         FP += FP_i
-        FN += FN_i
         TN += TN_i
+        FN += FN_i
         
         # Save predictions (claude)
         pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
