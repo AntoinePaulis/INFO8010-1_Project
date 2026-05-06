@@ -58,6 +58,7 @@ test_losses = []
 all_predictions = []
 all_ground_truths = []
 all_dataset_indices = []
+sample_metrics = []  # Will store (idx, detected, is_TP, is_FP, is_FN, is_TN)
 
 with torch.no_grad():
     batch_start_idx = 0
@@ -71,14 +72,26 @@ with torch.no_grad():
         test_losses.append(loss.detach())
         
         print(f"Batch shapes - x: {x.shape}, y: {y.shape}, pred: {pred.shape}")
+        # Save predictions (claude)
+        pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
+        
+        # Compute metrics per sample in batch
+        for b in range(x.shape[0]):
+            idx = batch_start_idx + b
+            detected = pred_class[b].max() >= 128
+            sample_metrics.append({
+                'dataset_idx': idx,
+                'detected': detected,
+                'max_pred_value': pred_class[b].max().item()
+            })
+        
+        # Aggregate metrics
         TP_i, FP_i, TN_i, FN_i, multiple_balls = compute_ball_metrics(pred, y)
         TP += TP_i
         FP += FP_i
         TN += TN_i
         FN += FN_i
-        
-        # Save predictions (claude)
-        pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
+
         all_predictions.append(pred_class.cpu())
         all_ground_truths.append(y.cpu())
         
@@ -130,6 +143,7 @@ torch.save({
     'predictions': torch.cat(all_predictions, dim=0),  # (N, H, W)
     'ground_truths': torch.cat(all_ground_truths, dim=0),  # (N, 1, H, W)
     'dataset_indices': all_dataset_indices,
+    'sample_metrics': sample_metrics,
     'model_file': parameters['loading_file'],
     'timestamp': timestamp,
     'metrics': {
