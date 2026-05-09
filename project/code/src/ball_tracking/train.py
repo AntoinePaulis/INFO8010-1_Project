@@ -10,8 +10,9 @@ from datetime import datetime
 import cv2
 import numpy as np
 from accelerate import Accelerator
+import argparse
 
-def compute_ball_metrics(pred, y, threshold=5):
+def compute_ball_metrics(pred, y, visibility_batch, threshold=5):
     """
     pred : (B, 256, H, W) - raw logits from TrackNet (256 classes)
     y    : (B, 1, H, W)   - normalized heatmap [0,1]
@@ -25,66 +26,49 @@ def compute_ball_metrics(pred, y, threshold=5):
 
     pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
 
-    multiple_balls = 0
-
     for b in range(B):
+        visibility = visibility_batch[b].item()
         true_heatmap = y[b, 0]
-        pred_heatmap = pred_class[b].float().cpu().numpy().astype(np.uint8)
+        pred_heatmap = pred_class[b].float() 
+        ball_detected = pred_heatmap.max() > 2.55
 
-        ball_visible = true_heatmap.max() > 0.01
-
-        binary_pred = np.where(pred_heatmap >= 128, 255, 0).astype(np.uint8)
-        
-        circles = cv2.HoughCircles(
-            binary_pred,
-            cv2.HOUGH_GRADIENT,
-            dp=1,
-            minDist=20,
-            param1=50,
-            param2=10,
-            minRadius=2,
-            maxRadius=12
-        )
-
-        detected_balls = []
-        if circles is not None:
-            circles = np.round(circles[0, :]).astype(int)
-            for (x_c, y_c, r) in circles:
-                detected_balls.append((x_c, y_c))
-        
-        num_detections = len(detected_balls)
+        if visibility == 0 or visibility == 3:
+            ball_visible = False
+        else:
+            ball_visible = True
 
         if not ball_visible:
-            if num_detections == 0:
+            if not ball_detected:
                 tn += 1
             else:
                 fp += 1
-        else:
-            if num_detections == 0:
+        else: # ball is visible
+            if not ball_detected:
                 fn += 1
-            elif num_detections > 1:
-                fn += 1
-                multiple_balls += 1
             else:
                 true_idx = torch.argmax(true_heatmap)
+                pred_idx = torch.argmax(pred_heatmap)
+
                 true_y_coord, true_x_coord = divmod(true_idx.item(), W)
-                pred_x, pred_y = detected_balls[0]
-                dist = ((pred_x - true_x_coord)**2 + 
-                        (pred_y - true_y_coord)**2) ** 0.5
+                pred_y_coord, pred_x_coord = divmod(pred_idx.item(), W)
+                
+                dist = ((pred_x_coord - true_x_coord)**2 + 
+                        (pred_y_coord - true_y_coord)**2) ** 0.5
+                
                 if dist < threshold:
                     tp += 1
                 else:
                     fp += 1
 
-    return tp, fp, tn, fn, multiple_balls
+    return tp, fp, tn, fn
 
 def criterionCrossEntropy(pred, y):
-    y = (y * 255).squeeze(1).long()
+    y = y.squeeze(1).long()
     loss = nn.CrossEntropyLoss()(pred, y)
     return loss
 
 def criterionFocalLoss(pred, y, gamma=2):
-    y = (y * 255).squeeze(1).long()
+    y = y.squeeze(1).long()
     ce = F.cross_entropy(pred, y, reduction="none")
     loss = (1 - torch.exp(-ce)) ** gamma * ce
     return loss.mean()
@@ -92,21 +76,26 @@ def criterionFocalLoss(pred, y, gamma=2):
 def train(num_epochs, accelerator=None):
     train_avg_loss = []
     val_avg_loss = []
-    total_multiple_balls = 0
 
     for i in range(num_epochs):
         train_losses = []
         val_losses = []
         network.train()
         TP, TN, FP, FN = 0, 0, 0, 0
-        multiple_balls = 0
         
+        # DEBUG: Check one sample
+        sample_x, sample_y = next(iter(trainloader))
+        print(f"DEBUG - Input range: [{sample_x.min():.3f}, {sample_x.max():.3f}]")
+        print(f"DEBUG - Heatmap range: [{sample_y.min():.3f}, {sample_y.max():.3f}]")
+        print(f"DEBUG - Heatmap dtype: {sample_y.dtype}")
+        print(f"DEBUG - Ball visible samples: {(sample_y.max(dim=-1)[0].max(dim=-1)[0] > 2.55).sum()}/{sample_y.shape[0]}")
         for x, y in trainloader:
             # accelerator.prepare() already moved data to device,
             # manual .to(device) is only needed without accelerate
             if accelerator is None:
                 x = x.to(device)
                 y = y.to(device)
+                vis = vis.to(device)
             
             pred = network(x)
             
@@ -122,8 +111,10 @@ def train(num_epochs, accelerator=None):
             # KEY difference: accelerator handles fp16 gradient scaling
             if accelerator is not None:
                 accelerator.backward(loss)
+                accelerator.clip_grad_norm_(network.parameters(), max_norm=1.0) # claude suggestion
             else:
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(network.parameters(), max_norm=1.0) # claude suggestion
 
             optimizer.step()
             
@@ -151,7 +142,6 @@ def train(num_epochs, accelerator=None):
                 FP += FP_i
                 TN += TN_i
                 FN += FN_i
-                multiple_balls += multiple_balls_i
                 
                 val_losses.append(loss)
                 batch_idx = len(val_losses)
@@ -173,8 +163,6 @@ def train(num_epochs, accelerator=None):
         recall = TP/(TP+FN) if (TP+FN) > 0 else 0.0
         accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
         f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
-
-        total_multiple_balls += multiple_balls
         
         wandb.log({
             "epoch" : i + 1,
@@ -189,8 +177,6 @@ def train(num_epochs, accelerator=None):
             "val/FP" : FP,
             "val/TN" : TN,
             "val/FN" : FN,
-            "val/multiple_balls_epoch" : multiple_balls,
-            "val/multiple_balls_total" : total_multiple_balls
         })
         
         print("Epoch "+str(i)+" : train_loss = "+str(epoch_train_loss)+" and val_loss = "+str(epoch_val_loss))
@@ -210,23 +196,24 @@ if __name__ == "__main__":
     parameters = {
         "optimizer" : "Adam",
         "model" : "TrackNet",
-        "num_workers" : 0,
+        "num_workers" : 2,
         "batch_size" : 4,
         "frame" : "last",
         "train_coef" : 0.7, 
         "val_coef" : 0.15,
         "criterion" : "Focal loss",
         "learning_rate" : 0.001,
-        "num_epochs" : 100, 
+        "num_epochs" : 10, 
         "nb_input_frame" : 3,
-        "variance" : 10,
-        "scheduler" : True,
+        "variance" : 7, # chosen after running test_heatmap 
+        "scheduler" : False,
         "weight_init" : "he",
         "dropout" : False,
-        "save_every": 2,
-        "shuffle" : False,
+        "save_every": 5,
+        "shuffle" : True, #IMPORTANT EDIT
         "loading" : False,
-        "accelerate" : True   # ← toggle here
+        "accelerate" : True,   # ← toggle here
+        "normalization" : "imagenet" # matching the Tracknet paper
     }
 
     if parameters["criterion"] == "Focal loss":
@@ -237,7 +224,7 @@ if __name__ == "__main__":
 
     if parameters["scheduler"]:
         parameters["gamma_scheduler"] = 0.1
-        parameters["step_size_scheduler"] = 5
+        parameters["step_size_scheduler"] = 15  # Changed from 5
 
     if parameters["dropout"]:
         parameters["dropout_p"] = 0.2
@@ -282,9 +269,9 @@ if __name__ == "__main__":
                                                      gamma=parameters["gamma_scheduler"])
         
     trainSet = BallDataset(type="train", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                           nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"])
+                           nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"], normalization=parameters["normalization"])
     valSet = BallDataset(type="val", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                         nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"])
+                         nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"], normalization=parameters["normalization"])
 
     trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
                              num_workers=parameters["num_workers"])
