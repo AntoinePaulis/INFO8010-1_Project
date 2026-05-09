@@ -9,6 +9,7 @@ import os
 from datetime import datetime
 import cv2
 import numpy as np
+from accelerate import Accelerator
 
 def compute_ball_metrics(pred, y, threshold=5):
     """
@@ -22,29 +23,26 @@ def compute_ball_metrics(pred, y, threshold=5):
     B, _, H, W = pred.shape
     tp, fp, tn, fn = 0, 0, 0, 0
 
-    # Convert pred logits to class indices (0-255), then normalize back
     pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
 
     multiple_balls = 0
 
     for b in range(B):
-        true_heatmap = y[b, 0] # (H, W)
-        pred_heatmap = pred_class[b].float().cpu().numpy().astype(np.uint8) # Hough is cpu-only
+        true_heatmap = y[b, 0]
+        pred_heatmap = pred_class[b].float().cpu().numpy().astype(np.uint8)
 
-        ball_visible = true_heatmap.max() > 0.01 # true for vc = 1 or 2
+        ball_visible = true_heatmap.max() > 0.01
 
-        # binarize prediction at threshold 128 (Tracknet paper - page 8)
         binary_pred = np.where(pred_heatmap >= 128, 255, 0).astype(np.uint8)
         
-        # Hough circle detection
         circles = cv2.HoughCircles(
             binary_pred,
             cv2.HOUGH_GRADIENT,
-            dp=1, # keeping same img resolution
-            minDist=20, # min distance between circles
+            dp=1,
+            minDist=20,
             param1=50,
-            param2=10, # lower = more circles detected
-            minRadius=2, # ball is ~2-12px
+            param2=10,
+            minRadius=2,
             maxRadius=12
         )
 
@@ -57,30 +55,22 @@ def compute_ball_metrics(pred, y, threshold=5):
         num_detections = len(detected_balls)
 
         if not ball_visible:
-            # Ball is invisible — good prediction = near-zero heatmap
             if num_detections == 0:
-                tn += 1   # correctly predicted no ball
+                tn += 1
             else:
-                fp += 1   # incorrectly predicted ball(s)
+                fp += 1
         else:
-            # Ball is visible — check if exactly on ball predicted & position close enough
             if num_detections == 0:
-                fn += 1 # failed to detect the ball
-            
+                fn += 1
             elif num_detections > 1:
-                fn += 1 # detected several balls (wrong)
+                fn += 1
                 multiple_balls += 1
             else:
-                # exactly one ball: check distance
                 true_idx = torch.argmax(true_heatmap)
                 true_y_coord, true_x_coord = divmod(true_idx.item(), W)
-
                 pred_x, pred_y = detected_balls[0]
-
-                # euclidean distance of the ball centroids
                 dist = ((pred_x - true_x_coord)**2 + 
                         (pred_y - true_y_coord)**2) ** 0.5
-
                 if dist < threshold:
                     tp += 1
                 else:
@@ -89,25 +79,17 @@ def compute_ball_metrics(pred, y, threshold=5):
     return tp, fp, tn, fn, multiple_balls
 
 def criterionCrossEntropy(pred, y):
-    # Page 8 - TrackNet paper
-    y = (y * 255).squeeze(1).long()   # (B, H, W)
-
+    y = (y * 255).squeeze(1).long()
     loss = nn.CrossEntropyLoss()(pred, y)
-
     return loss
 
-# Default value of gamma=2 based on the focal loss paper - page 5
 def criterionFocalLoss(pred, y, gamma=2):
     y = (y * 255).squeeze(1).long()
-    
-    ce = F.cross_entropy(pred, y, reduction="none")  # (B, H, W)
-    
+    ce = F.cross_entropy(pred, y, reduction="none")
     loss = (1 - torch.exp(-ce)) ** gamma * ce
-    
     return loss.mean()
 
-# From homework 2
-def train(num_epochs):
+def train(num_epochs, accelerator=None):
     train_avg_loss = []
     val_avg_loss = []
     total_multiple_balls = 0
@@ -115,41 +97,47 @@ def train(num_epochs):
     for i in range(num_epochs):
         train_losses = []
         val_losses = []
-        network.train() # enable batchnorm/dropout
+        network.train()
         TP, TN, FP, FN = 0, 0, 0, 0
         multiple_balls = 0
         
         for x, y in trainloader:
-            # moving inputs, outputs to GPU
-            x = x.to(device)
-            y = y.to(device)
+            # accelerator.prepare() already moved data to device,
+            # manual .to(device) is only needed without accelerate
+            if accelerator is None:
+                x = x.to(device)
+                y = y.to(device)
             
-            pred = network(x) # forward pass
+            pred = network(x)
             
             if parameters["criterion"] == "Cross-entropy loss":
                 loss = criterionCrossEntropy(pred, y)
             elif parameters["criterion"] == "Focal loss":
                 loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
             
-            train_losses.append(loss.detach()) # tracking losses, for avg
+            train_losses.append(loss.detach())
 
-            # removing prev. gradients, computing new ones, updating weights
             optimizer.zero_grad()
-            loss.backward()
+
+            # KEY difference: accelerator handles fp16 gradient scaling
+            if accelerator is not None:
+                accelerator.backward(loss)
+            else:
+                loss.backward()
+
             optimizer.step()
             
-            # Print progress every 100 batches
             batch_idx = len(train_losses)
             if batch_idx % 100 == 0:
                 print(f"Epoch {i} - Train batch {batch_idx}/{len(trainloader)} ({100*batch_idx/len(trainloader):.1f}%)")
 
-        network.eval() # disable batchnorm/dropout
+        network.eval()
         
-        with torch.no_grad(): # not computing gradients for val.
-
+        with torch.no_grad():
             for x, y in valloader:
-                x = x.to(device)
-                y = y.to(device)
+                if accelerator is None:
+                    x = x.to(device)
+                    y = y.to(device)
 
                 pred = network(x)
                 
@@ -171,9 +159,9 @@ def train(num_epochs):
                     print(f"Epoch {i} - Val batch {batch_idx}/{len(valloader)} ({100*batch_idx/len(valloader):.1f}%)")
 
         if parameters["scheduler"] == True:
-            scheduler.step() # adjusting learning rate
+            scheduler.step()
         
-        lr = optimizer.param_groups[0]["lr"] # Because can change with the scheduler
+        lr = optimizer.param_groups[0]["lr"]
         
         epoch_train_loss = torch.mean(torch.tensor(train_losses))
         epoch_val_loss = torch.mean(torch.tensor(val_losses))
@@ -181,13 +169,9 @@ def train(num_epochs):
         train_avg_loss.append(epoch_train_loss)
         val_avg_loss.append(epoch_val_loss)
         
-        # proportion of good predictions among all the positive predictions
         precision = TP/(TP+FP) if (TP+FP) > 0 else 0.0
-        # proportion of positives that are detected
-        recall = TP/(TP+FN) if (TP+FN) >0 else 0.0
-        # remember accuracy is skewed bc of dataset errors for tn
+        recall = TP/(TP+FN) if (TP+FN) > 0 else 0.0
         accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
-        # harmonic mean of precision and recall
         f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
 
         total_multiple_balls += multiple_balls
@@ -215,7 +199,9 @@ def train(num_epochs):
             os.makedirs('../../models/ball_tracking', exist_ok=True)
             timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
             filename = f'tracknet_ball_epoch{i+1}_{timestamp}.pth'
-            torch.save(network.state_dict(), f'../../models/ball_tracking/{filename}')
+            # unwrap_model needed with accelerate to get the raw nn.Module
+            model_to_save = accelerator.unwrap_model(network) if accelerator is not None else network
+            torch.save(model_to_save.state_dict(), f'../../models/ball_tracking/{filename}')
             print(f"Saved checkpoint: {filename}")
     
     return train_avg_loss, val_avg_loss
@@ -225,21 +211,22 @@ if __name__ == "__main__":
         "optimizer" : "Adam",
         "model" : "TrackNet",
         "num_workers" : 0,
-        "batch_size" : 2, # was at 4, got out of memory warning
+        "batch_size" : 4,
         "frame" : "last",
         "train_coef" : 0.7, 
         "val_coef" : 0.15,
         "criterion" : "Focal loss",
         "learning_rate" : 0.001,
-        "num_epochs" : 10, 
+        "num_epochs" : 100, 
         "nb_input_frame" : 3,
         "variance" : 10,
-        "scheduler" : False,
-        "weight_init" : "uniform", # uniform on the paper but probably updated
+        "scheduler" : True,
+        "weight_init" : "he",
         "dropout" : False,
-        "save_every": 2, # every x epochs checkpoint for saving weights
+        "save_every": 2,
         "shuffle" : False,
-        "loading" : False
+        "loading" : False,
+        "accelerate" : True   # ← toggle here
     }
 
     if parameters["criterion"] == "Focal loss":
@@ -267,14 +254,20 @@ if __name__ == "__main__":
         config=parameters
     )
 
-    device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-    print(f'Using device: {device}')
+    # ── Accelerate setup ───────────────────────────────────────────────────
+    if parameters["accelerate"]:
+        accelerator = Accelerator(mixed_precision="fp16")
+        device = accelerator.device
+        print(f"Using device: {device} (accelerate fp16 enabled)")
+    else:
+        accelerator = None
+        device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+        print(f"Using device: {device}")
 
-    # hardcoding dropout to false and dropout_p = 0.2 for now, might change that later
-    network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"]) 
+    network = TrackNet(weight_init=parameters["weight_init"], nb_input_frames=parameters["nb_input_frame"])
     network.to(device)
 
-    if parameters["loading"] == True:
+    if parameters["loading"]:
         network.load_state_dict(torch.load(parameters["loading_path"], map_location=device))
         print(f"Loaded weights from: {parameters['loading_path']}")
     
@@ -282,23 +275,29 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(network.parameters(), lr=parameters["learning_rate"])
     elif parameters["optimizer"] == "AdamW":
         optimizer = torch.optim.AdamW(network.parameters(), lr=parameters["learning_rate"], 
-                                    weight_decay=parameters["weight_decay"])
+                                      weight_decay=parameters["weight_decay"])
 
-    # Improvement is to trigger the scheduler only when the validation loss stops improving
-    if parameters["scheduler"] == True:
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=parameters["step_size_scheduler"],
-            gamma=parameters["gamma_scheduler"])
+    if parameters["scheduler"]:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step_size_scheduler"],
+                                                     gamma=parameters["gamma_scheduler"])
         
     trainSet = BallDataset(type="train", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                        nb_input_frames=parameters["nb_input_frame"],  variance=parameters["variance"], frame=parameters["frame"])
+                           nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"])
     valSet = BallDataset(type="val", train_coef=parameters["train_coef"], val_coef=parameters["val_coef"], 
-                        nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"])
+                         nb_input_frames=parameters["nb_input_frame"], variance=parameters["variance"], frame=parameters["frame"])
 
     trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
-                            num_workers=parameters["num_workers"])
+                             num_workers=parameters["num_workers"])
     valloader = DataLoader(valSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"], 
-                            num_workers=parameters["num_workers"])
+                           num_workers=parameters["num_workers"])
+
+    # accelerator.prepare() wraps model, optimizer and dataloaders
+    # it handles device placement and fp16 casting automatically
+    if accelerator is not None:
+        network, optimizer, trainloader, valloader = accelerator.prepare(
+            network, optimizer, trainloader, valloader
+        )
 
     print(f"\nTrain size: {len(trainloader)}, Test size: {len(valloader)}")
 
-    train_avg_loss, val_avg_loss = train(parameters["num_epochs"])
+    train_avg_loss, val_avg_loss = train(parameters["num_epochs"], accelerator=accelerator)

@@ -10,7 +10,7 @@
 #SBATCH --error=../logs/train_ball_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=andy.jalloh@student.uliege.be
-#SBATCH --partition=all
+#SBATCH --partition=quadro
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate deep

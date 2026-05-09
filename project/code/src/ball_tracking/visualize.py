@@ -89,6 +89,9 @@ def visualize_from_predictions(predictions_file, dataset, output_dir, clip_idx=0
         pred_idx = dataset_indices.index(idx)
         pred_heatmap = predictions[pred_idx].numpy().astype(np.uint8)  # (H, W)
         gt_heatmap = ground_truths[pred_idx, 0].numpy()  # (H, W)
+
+        raw_heatmap_vis = cv2.applyColorMap(pred_heatmap, cv2.COLORMAP_JET)
+        raw_heatmap_vis = cv2.resize(raw_heatmap_vis, (dataset.w, dataset.h))
         
         # Load original frame
         img_paths, _, _, _ = dataset.dataset[idx]
@@ -123,8 +126,7 @@ def visualize_from_predictions(predictions_file, dataset, output_dir, clip_idx=0
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         # Create side-by-side: original + heatmap
-        combined = np.hstack([frame_annotated, heatmap_vis])
-        
+        combined = np.hstack([frame_annotated, raw_heatmap_vis])        
         # Save frame
         frame_path = os.path.join(clip_output_dir, f"frame_{frame_num:04d}.jpg")
         cv2.imwrite(frame_path, combined, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -155,7 +157,7 @@ if __name__ == "__main__":
     
     # Load predictions
     predictions_file = os.path.join(OUTPUTS_DIR, "ball_tracking", "predictions", 
-                                    "predictions_06052026_00h06m41s.pt")
+                                    "predictions_06052026_11h53m09s.pt")
     
     data = torch.load(predictions_file, map_location='cpu')
     predictions = data['predictions']
