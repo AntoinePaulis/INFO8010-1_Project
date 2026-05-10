@@ -84,12 +84,12 @@ def train(num_epochs, accelerator=None):
         TP, TN, FP, FN = 0, 0, 0, 0
         
         # DEBUG: Check one sample
-        sample_x, sample_y = next(iter(trainloader))
+        sample_x, sample_y, sample_vis = next(iter(trainloader))
         print(f"DEBUG - Input range: [{sample_x.min():.3f}, {sample_x.max():.3f}]")
         print(f"DEBUG - Heatmap range: [{sample_y.min():.3f}, {sample_y.max():.3f}]")
         print(f"DEBUG - Heatmap dtype: {sample_y.dtype}")
         print(f"DEBUG - Ball visible samples: {(sample_y.max(dim=-1)[0].max(dim=-1)[0] > 2.55).sum()}/{sample_y.shape[0]}")
-        for x, y in trainloader:
+        for x, y, vis in trainloader:
             # accelerator.prepare() already moved data to device,
             # manual .to(device) is only needed without accelerate
             if accelerator is None:
@@ -125,10 +125,11 @@ def train(num_epochs, accelerator=None):
         network.eval()
         
         with torch.no_grad():
-            for x, y in valloader:
+            for x, y, vis in valloader:
                 if accelerator is None:
                     x = x.to(device)
                     y = y.to(device)
+                    vis = vis.to(device)
 
                 pred = network(x)
                 
@@ -137,7 +138,7 @@ def train(num_epochs, accelerator=None):
                 elif parameters["criterion"] == "Focal loss":
                     loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
 
-                TP_i, FP_i, TN_i, FN_i, multiple_balls_i = compute_ball_metrics(pred, y)
+                TP_i, FP_i, TN_i, FN_i = compute_ball_metrics(pred, y, vis)
                 TP += TP_i
                 FP += FP_i
                 TN += TN_i
@@ -203,9 +204,9 @@ if __name__ == "__main__":
         "val_coef" : 0.15,
         "criterion" : "Focal loss",
         "learning_rate" : 0.001,
-        "num_epochs" : 10, 
+        "num_epochs" : 30, 
         "nb_input_frame" : 3,
-        "variance" : 7, # chosen after running test_heatmap 
+        "variance" : 10, # chosen after running test_heatmap 
         "scheduler" : False,
         "weight_init" : "he",
         "dropout" : False,

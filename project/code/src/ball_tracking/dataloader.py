@@ -26,7 +26,7 @@ def generate_gaussian_heatmap(h, w, ball_x, ball_y, visibility, variance):
 
 class BallDataset(Dataset):
     def __init__(self, type="train", frame="last", train_coef=0.7, val_coef=0.15, root_dir="/scratch/users/andyjalloh/ball_tracking_kaggle_dataset/",
-                 img_size=(640, 360), variance=7, nb_input_frames=3, normalization = "imagenet"):
+                 img_size=(640, 360), variance=10, nb_input_frames=3, normalization = "imagenet"):
         """
         Args:
             gameList: list of the games we want in the form of [game1, game, ...]
