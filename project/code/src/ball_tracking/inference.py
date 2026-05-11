@@ -11,14 +11,14 @@ from config import OUTPUTS_DIR
 import os
 
 parameters = {
-    "weight_init" : "uniform",
+    "weight_init" : "he",
     "nb_input_frames" : 3,
     "dropout" : False,
     "dropout_p" : 0.2 ,
-    "shuffle" : False,
-    "num_workers" : 0,
-    "batch_size" : 2,
-    "loading_file" : "tracknet_ball_epoch30_30042026_03h28m14s.pth",
+    "shuffle" : True,
+    "num_workers" : 2,
+    "batch_size" : 4,
+    "loading_file" : "tracknet_ball_epoch30_11052026_03h27m06s.pth",
     "gamma_loss" : 2
 }
 
@@ -62,9 +62,10 @@ sample_metrics = []  # Will store (idx, detected, is_TP, is_FP, is_FN, is_TN)
 
 with torch.no_grad():
     batch_start_idx = 0
-    for x, y in testloader:
+    for x, y, vis in testloader:
         x = x.to(device)
         y = y.to(device)
+        vis.to(device)
         pred = network(x)
         
         loss = criterionFocalLoss(pred, y, parameters["gamma_loss"])
@@ -72,21 +73,23 @@ with torch.no_grad():
         test_losses.append(loss.detach())
         
         print(f"Batch shapes - x: {x.shape}, y: {y.shape}, pred: {pred.shape}")
-        # Save predictions (claude)
+        # Line 74-82 in inference.py - replace with:
+
         pred_class = torch.argmax(pred, dim=1)  # (B, H, W)
-        
+
         # Compute metrics per sample in batch
         for b in range(x.shape[0]):
             idx = batch_start_idx + b
-            detected = pred_class[b].max() >= 128
+            pred_heatmap = pred_class[b].float()
+            ball_detected = pred_heatmap.max() > 2.55  # Match compute_ball_metrics threshold
             sample_metrics.append({
                 'dataset_idx': idx,
-                'detected': detected,
-                'max_pred_value': pred_class[b].max().item()
+                'detected': ball_detected,
+                'max_pred_value': pred_heatmap.max().item()
             })
         
         # Aggregate metrics
-        TP_i, FP_i, TN_i, FN_i, multiple_balls = compute_ball_metrics(pred, y)
+        TP_i, FP_i, TN_i, FN_i = compute_ball_metrics(pred, y, vis)
         TP += TP_i
         FP += FP_i
         TN += TN_i

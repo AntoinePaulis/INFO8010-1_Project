@@ -203,13 +203,13 @@ if __name__ == "__main__":
         "train_coef" : 0.7, 
         "val_coef" : 0.15,
         "criterion" : "Focal loss",
-        "learning_rate" : 0.001,
-        "num_epochs" : 30, 
+        "learning_rate" : 0.0005,
+        "num_epochs" : 10, 
         "nb_input_frame" : 3,
         "variance" : 10, # chosen after running test_heatmap 
         "scheduler" : False,
         "weight_init" : "he",
-        "dropout" : False,
+        "dropout" : True,
         "save_every": 5,
         "shuffle" : True, #IMPORTANT EDIT
         "loading" : False,
@@ -228,7 +228,7 @@ if __name__ == "__main__":
         parameters["step_size_scheduler"] = 15  # Changed from 5
 
     if parameters["dropout"]:
-        parameters["dropout_p"] = 0.2
+        parameters["dropout_p"] = 0.3
 
     if parameters["loading"]:
         parameters["loading_path"] = "../../models/ball_tracking/tracknet_ball_epoch30_30042026_03h28m14s.pth"
