@@ -125,34 +125,66 @@ def visualize_from_predictions(predictions_file, dataset, output_dir, clip_idx=0
         out.release()
         print(f"Saved video: {video_path}")
 
+def compute_clip_tp(predictions, ground_truths, dataset_indices, dataset, threshold=5):
+    """
+    Compute true positives per clip by checking pixel distance between pred and GT.
+    """
+    from collections import defaultdict
+    clip_tp = defaultdict(int)
+    clip_frames = defaultdict(list)
+    
+    for i, idx in enumerate(dataset_indices):
+        img_paths, _, _, vis = dataset.dataset[idx]
+        clip_name = os.path.basename(os.path.dirname(img_paths[0]))
+        clip_frames[clip_name].append(idx)
+        
+        # Skip if ball not visible
+        if vis == 0 or vis == 3:
+            continue
+            
+        pred_heatmap = predictions[i].numpy()
+        gt_heatmap = ground_truths[i, 0].numpy()
+        
+        # Check if ball detected
+        if pred_heatmap.max() <= 2.55:
+            continue
+        
+        # Get predicted and ground truth positions
+        H, W = pred_heatmap.shape
+        pred_idx = np.argmax(pred_heatmap)
+        gt_idx = np.argmax(gt_heatmap)
+        
+        pred_y, pred_x = divmod(pred_idx, W)
+        gt_y, gt_x = divmod(gt_idx, W)
+        
+        dist = ((pred_x - gt_x)**2 + (pred_y - gt_y)**2) ** 0.5
+        
+        if dist < threshold:
+            clip_tp[clip_name] += 1
+    
+    return clip_tp, clip_frames
+
 if __name__ == "__main__":
     testSet = BallDataset(type="test", train_coef=0.7, val_coef=0.15, 
                           nb_input_frames=3, variance=10, frame="last")
     
     predictions_file = os.path.join(OUTPUTS_DIR, "ball_tracking", "predictions", 
-                                    "predictions_06052026_11h53m09s.pt")
+                                    "predictions_11052026_11h59m45s.pt")
     
     data = torch.load(predictions_file, map_location='cpu')
-    sample_metrics = data['sample_metrics']
+    predictions = data['predictions']
+    ground_truths = data['ground_truths']
+    dataset_indices = data['dataset_indices']
     
-    from collections import defaultdict
-    clip_detections = defaultdict(int)
-    clip_frames = defaultdict(list)
+    # Compute TP per clip
+    clip_tp, clip_frames = compute_clip_tp(predictions, ground_truths, dataset_indices, testSet)
     
-    for metric in sample_metrics:
-        idx = metric['dataset_idx']
-        img_paths, _, _, _ = testSet.dataset[idx]
-        clip_name = os.path.basename(os.path.dirname(img_paths[0]))
-        
-        clip_frames[clip_name].append(idx)
-        if metric['detected']:
-            clip_detections[clip_name] += 1
-    
-    best_clip_name = max(clip_detections.items(), key=lambda x: x[1])[0]
+    # Find clip with most TPs
+    best_clip_name = max(clip_tp.items(), key=lambda x: x[1])[0]
     best_clip_idx = list(clip_frames.keys()).index(best_clip_name)
     
     print(f"Auto-selected best clip: {best_clip_name} (index {best_clip_idx})")
-    print(f"Detections: {clip_detections[best_clip_name]}/{len(clip_frames[best_clip_idx])}")
+    print(f"True Positives: {clip_tp[best_clip_name]}/{len(clip_frames[best_clip_name])}")
     
     output_dir = os.path.join(OUTPUTS_DIR, "ball_tracking", "visualizations")
     
