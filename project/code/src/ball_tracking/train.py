@@ -163,6 +163,7 @@ def train(num_epochs, accelerator=None):
         precision = TP/(TP+FP) if (TP+FP) > 0 else 0.0
         recall = TP/(TP+FN) if (TP+FN) > 0 else 0.0
         accuracy = (TP+TN)/(TP+TN+FP+FN) if (TP+TN+FP+FN) > 0 else 0.0
+        specificity = TN/(TN+FP) if (TN+FP) > 0 else 0.0
         f1 = 2*precision*recall/(precision+recall) if (precision+recall) > 0 else 0.0
         
         wandb.log({
@@ -173,6 +174,7 @@ def train(num_epochs, accelerator=None):
             "val/accuracy" : accuracy,
             "val/precision" : precision,
             "val/recall" : recall,
+            "val/specificity": specificity,
             "val/f1" : f1,
             "val/TP" : TP,
             "val/FP" : FP,
