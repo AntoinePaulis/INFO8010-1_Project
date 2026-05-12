@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint_sequential
 
 class Block(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, dropout=False, dropout_p=0.2):
@@ -56,7 +57,7 @@ class TrackNetCourt(nn.Module):
         self._init_weights(weight_init = weight_init)
         
     def forward(self, x):
-        x = self.net(x)
+        x = checkpoint_sequential(self.net, segments=4, input=x, use_reentrant=False)
         return x
     
     def _init_weights(self, weight_init):

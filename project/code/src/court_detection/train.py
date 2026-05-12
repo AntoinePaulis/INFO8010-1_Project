@@ -67,6 +67,7 @@ def train(num_epochs, accelerator=None):
                 torch.nn.utils.clip_grad_norm_(network.parameters(), max_norm=1.0)
 
             optimizer.step()
+            torch.cuda.empty_cache()
 
             batch_idx = len(train_losses)
             if batch_idx % 100 == 0:
@@ -164,6 +165,7 @@ if __name__ == "__main__":
         "loading": False,
         "accelerate": True,
         "normalization": "imagenet",
+        "img_size": (320, 176),
     }
 
     if parameters["optimizer"] == "AdamW":
@@ -217,8 +219,8 @@ if __name__ == "__main__":
 
     criterion = nn.MSELoss()
 
-    trainSet = CourtDataset(type="train", split=parameters["split"], variance=parameters["variance"], normalization=parameters["normalization"])
-    valSet = CourtDataset(type="val", split=parameters["split"], variance=parameters["variance"], normalization=parameters["normalization"])
+    trainSet = CourtDataset(type="train", split=parameters["split"], variance=parameters["variance"], normalization=parameters["normalization"], img_size=parameters["img_size"])
+    valSet = CourtDataset(type="val", split=parameters["split"], variance=parameters["variance"], normalization=parameters["normalization"], img_size=parameters["img_size"])
 
     trainloader = DataLoader(trainSet, batch_size=parameters["batch_size"], shuffle=parameters["shuffle"],
                             num_workers=parameters["num_workers"])

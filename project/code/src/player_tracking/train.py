@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import torch
 import wandb
+import os
 from datetime import datetime
 
 parameters = {
@@ -20,16 +21,19 @@ wandb.init(
     config=parameters
 )
 
-print(f'Using device: {parameters['device']}')
+print(f"Using device: {parameters['device']}")
 
 model = YOLO(parameters["model"])
+
+save_dir = f"/home/andyjalloh/andy/INFO8010-1_Project/project/code/models/player_tracking"
+os.makedirs(save_dir, exist_ok=True)
 
 training = model.train(
     data="/scratch/users/andyjalloh/player_tracking_yolov8_roboflow_dataset/data.yaml",
     epochs=parameters["epochs"],
     imgsz=parameters["imgsz"],
     batch=parameters["batch"],
-    project="/home/andyjalloh/antoine/INFO8010-1_Project/project/code/models/player_tracking",
+    project=save_dir,
     name=f"{parameters['model']}_{timestamp}",
     device=parameters["device"],
     plots=True
