@@ -47,17 +47,29 @@ def split_dataset(dataset, train=True, split=0.7):
         return dataset[sep:]
 
 class CourtDataset(Dataset):
-    def __init__(self, root_dir="/scratch/users/andyjalloh/court_detection_github_dataset/", type="train", split=0.7, 
-                 img_size=(640, 360), variance=10):
+    def __init__(self, root_dir="/scratch/users/andyjalloh/court_detection_github_dataset/", type="train", split=0.7,
+                 img_size=(640, 360), variance=10, normalization="imagenet"):
         super().__init__()
         self.root_dir = root_dir
         self.w, self.h = img_size
         self.variance = variance
-        
+
+        NORMALIZATION_PRESETS = {
+            "imagenet": transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+            "symmetric": transforms.Normalize(
+                mean=[0.5, 0.5, 0.5],
+                std=[0.5, 0.5, 0.5]
+            ),
+            "none": transforms.Lambda(lambda x: x)
+        }
+
         self.transform = transforms.Compose([
             transforms.Resize((self.h, self.w)),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            NORMALIZATION_PRESETS[normalization]
         ])
 
         self.path_images = os.path.join(self.root_dir, 'images')

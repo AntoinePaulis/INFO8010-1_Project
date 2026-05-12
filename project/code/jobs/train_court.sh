@@ -10,9 +10,9 @@
 #SBATCH --error=../logs/train_court_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=andy.jalloh@student.uliege.be
-#SBATCH --partition=all
+#SBATCH --partition=quadro
 
-source /home/andyjalloh/anaconda3/etc/profile.d/conda.sh
+source ~/anaconda3/etc/profile.d/conda.sh
 conda activate deep
 
 cd /home/andyjalloh/andy/INFO8010-1_Project/project/code/src/court_detection/
