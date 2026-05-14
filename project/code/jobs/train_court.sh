@@ -17,4 +17,5 @@ conda activate deep
 
 cd /home/andyjalloh/andy/INFO8010-1_Project/project/code/src/court_detection/
 
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:32 # trying to avoid out of memory crash
 python train.py

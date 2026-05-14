@@ -10,22 +10,12 @@ from utils.draw import draw_ball_circle
 from datetime import datetime
 
 def extract_ball_position(pred_heatmap, threshold=2.55):
-    """
-    Extract ball position from heatmap using argmax (matches compute_ball_metrics).
-    
-    Args:
-        pred_heatmap: (H, W) numpy array, values 0-255
-        threshold: detection threshold (default 2.55 to match metrics)
-    
-    Returns:
-        (x, y) tuple if ball detected, else None
-    """
     if pred_heatmap.max() <= threshold:
         return None
     
     H, W = pred_heatmap.shape
-    idx = np.argmax(pred_heatmap)
-    y, x = divmod(idx, W)
+    flat_idx = np.argmax(pred_heatmap)
+    y, x = np.unravel_index(flat_idx, (H, W))  # ← Use unravel_index, not divmod
     return (int(x), int(y))
 
 def visualize_from_predictions(predictions_file, dataset, output_dir, clip_idx=0, save_video=False):
@@ -75,6 +65,7 @@ def visualize_from_predictions(predictions_file, dataset, output_dir, clip_idx=0
         img_paths, _, _, _ = dataset.dataset[idx]
         last_frame = cv2.imread(img_paths[-1])
         last_frame = cv2.resize(last_frame, (dataset.w, dataset.h))
+        print(f"Frame shape: {last_frame.shape[:2]}")  # Should be (dataset.h, dataset.w)
         
         # Extract ball position
         ball_pos = extract_ball_position(pred_heatmap, threshold=2.55)
@@ -86,6 +77,10 @@ def visualize_from_predictions(predictions_file, dataset, output_dir, clip_idx=0
         # Create model output frame (frame + detection overlay)
         output_frame = last_frame.copy()
         detected = ball_pos is not None
+
+        # Add to visualize_from_predictions, inside the frame loop:
+        print(f"Frame {frame_num}: pred max={pred_heatmap.max()}, argmax pos={np.unravel_index(np.argmax(pred_heatmap), pred_heatmap.shape)}")
+        print(f"  GT max={ground_truths[pred_idx, 0].numpy().max()}, argmax pos={np.unravel_index(np.argmax(ground_truths[pred_idx, 0].numpy()), ground_truths[pred_idx, 0].numpy().shape)}")
         
         if detected:
             x_ball, y_ball = ball_pos
@@ -167,6 +162,8 @@ def compute_clip_tp(predictions, ground_truths, dataset_indices, dataset, thresh
 if __name__ == "__main__":
     testSet = BallDataset(type="test", train_coef=0.7, val_coef=0.15, 
                           nb_input_frames=3, variance=10, frame="last")
+    
+    print(f"Dataset dimensions: w={testSet.w}, h={testSet.h}")
     
     predictions_file = os.path.join(OUTPUTS_DIR, "ball_tracking", "predictions", 
                                     "predictions_11052026_11h59m45s.pt")
