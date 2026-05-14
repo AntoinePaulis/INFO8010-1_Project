@@ -4,9 +4,9 @@ import wandb
 from datetime import datetime
 
 parameters = {
-    "device" : 0 if torch.cuda.is_available() else "cpu",
-    "imgsz"  : 320,
-    "loading_file" : "yolov8n.pt_03052026_11h36m14s",
+    "device":       0 if torch.cuda.is_available() else "cpu",
+    "imgsz":        320,
+    "loading_file": "yolov8s.pt_12052026_18h22m44s",
 }
 
 timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
@@ -14,13 +14,13 @@ timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
 wandb.init(
     entity="uliege-tennis-tracking",
     project="player-tracking",
-    name=f"yolov8n_inference_{timestamp}",
+    name=f"yolov8s_inference_{timestamp}",
     config=parameters
 )
 
-print(f'Using device: {parameters['device']}')
+print(f'Using device: {parameters["device"]}')
 
-loading_path = f"/home/andyjalloh/antoine/INFO8010-1_Project/project/code/models/player_tracking/{parameters['loading_file']}/weights/best.pt"
+loading_path = f"/home/andyjalloh/andy/INFO8010-1_Project/project/code/models/player_tracking/{parameters['loading_file']}/weights/best.pt"
 model = YOLO(loading_path)
 
 metrics = model.val(
@@ -28,7 +28,7 @@ metrics = model.val(
     split="test",
     imgsz=parameters["imgsz"],
     device=parameters["device"],
-    save_dir="/home/andyjalloh/antoine/INFO8010-1_Project/project/code/models/player_tracking/inference_results",
+    save_dir=f"/home/andyjalloh/andy/INFO8010-1_Project/project/code/models/player_tracking/inference_results_{timestamp}",
     plots=True
 )
 

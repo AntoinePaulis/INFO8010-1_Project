@@ -1,0 +1,110 @@
+import os
+import cv2
+import numpy as np
+import torch
+from dataloader import CourtDataset
+import sys
+sys.path.append('..')
+from config import OUTPUTS_DIR
+from datetime import datetime
+from PIL import Image
+
+THRESHOLD = 7  # pixel distance threshold — matches compute_court_metrics
+
+
+def load_image(img_path, img_size=(320, 176)):
+    img = np.array(Image.open(img_path).convert("RGB"))
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    return cv2.resize(img, img_size)
+
+
+def draw_keypoints(frame, keypoints, gt_keypoints=None):
+    """
+    Draw keypoints as circles with index labels.
+    gt_keypoints: if provided, each prediction is colored green (within THRESHOLD) or red (outside).
+                  if None, all keypoints are drawn in blue (used for GT panel).
+    """
+    for i, (x, y) in enumerate(keypoints):
+        if gt_keypoints is not None:
+            gx, gy = gt_keypoints[i]
+            dist = ((x - gx) ** 2 + (y - gy) ** 2) ** 0.5
+            color = (0, 255, 0) if dist < THRESHOLD else (0, 0, 255)
+        else:
+            color = (255, 100, 0)
+        cv2.circle(frame, (int(x), int(y)), 5, color, 2)
+        cv2.putText(frame, str(i), (int(x) + 5, int(y) - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, color, 1)
+    return frame
+
+
+def visualize_sample(img_path, pred_kps, gt_kps, sample_tp, nb_kps, img_size=(320, 176)):
+    """
+    Returns a three-panel image: original | GT keypoints | predicted keypoints.
+    """
+    img = load_image(img_path, img_size=img_size)
+
+    orig = img.copy()
+
+    gt_frame = img.copy()
+    draw_keypoints(gt_frame, gt_kps)
+    cv2.putText(gt_frame, "Ground Truth", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+    pred_frame = img.copy()
+    draw_keypoints(pred_frame, pred_kps, gt_keypoints=gt_kps)
+    cv2.putText(pred_frame, f"Prediction  TP={sample_tp}/{nb_kps}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+    return np.hstack([orig, gt_frame, pred_frame])
+
+
+if __name__ == "__main__":
+    IMG_SIZE = (320, 176)  # must match inference img_size
+
+    testSet = CourtDataset(type="test", img_size=IMG_SIZE, normalization="imagenet", variance=10)
+
+    predictions_dir = os.path.join(OUTPUTS_DIR, "court_detection", "predictions")
+
+    pred_files = sorted([f for f in os.listdir(predictions_dir) if f.endswith('.pt')])
+    if not pred_files:
+        print(f"No predictions found in {predictions_dir}")
+        exit(1)
+    predictions_file = os.path.join(predictions_dir, pred_files[-1])
+    print(f"Loading: {predictions_file}")
+
+    data = torch.load(predictions_file, map_location='cpu')
+    pred_keypoints = data['pred_keypoints']   # (N, nb_kps, 2)
+    gt_keypoints = data['gt_keypoints']       # (N, nb_kps, 2)
+    dataset_indices = data['dataset_indices']
+    sample_metrics = data['sample_metrics']
+
+    nb_kps = pred_keypoints.shape[1]
+    print(f"Loaded {len(pred_keypoints)} predictions ({nb_kps} keypoints each)")
+    print(f"Model: {data['model_file']}, F1={data['metrics']['f1']:.3f}")
+
+    timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
+    output_dir = os.path.join(OUTPUTS_DIR, "court_detection", "visualizations", timestamp)
+    os.makedirs(output_dir, exist_ok=True)
+
+    sorted_indices = sorted(range(len(sample_metrics)),
+                            key=lambda i: sample_metrics[i]['TP'], reverse=True)
+    top_n = min(20, len(sorted_indices))
+
+    best_tp = sample_metrics[sorted_indices[0]]['TP']
+    print(f"Best image TP={best_tp}/{nb_kps} — showing top {top_n}")
+
+    for rank, i in enumerate(sorted_indices[:top_n]):
+        ds_idx = dataset_indices[i]
+        img_id = testSet.dataset[ds_idx]['id']
+        img_path = os.path.join(testSet.path_images, img_id + '.png')
+
+        pred_kps = pred_keypoints[i].numpy().tolist()
+        gt_kps = gt_keypoints[i].numpy().tolist()
+        tp = sample_metrics[i]['TP']
+
+        combined = visualize_sample(img_path, pred_kps, gt_kps, tp, nb_kps, img_size=IMG_SIZE)
+
+        save_path = os.path.join(output_dir, f"rank{rank:03d}_tp{tp:02d}_{img_id}.jpg")
+        cv2.imwrite(save_path, combined, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        print(f"  [{rank+1}/{top_n}] {img_id}  TP={tp}/{nb_kps}")
+
+    print(f"\nSaved {top_n} visualizations to {output_dir}")
