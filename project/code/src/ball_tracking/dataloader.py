@@ -41,6 +41,7 @@ class BallDataset(Dataset):
         self.variance = variance
         self.nb_input_frames = nb_input_frames
         
+        # normalization presets was a claude suggestion
         # Option A: ImageNet stats (recommended for VGG16)
         NORMALIZATION_PRESETS = {
             "imagenet": transforms.Normalize(

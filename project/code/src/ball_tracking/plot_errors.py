@@ -1,3 +1,5 @@
+#CLAUDE GENERATED FILE TO PLOT ERRORS
+
 """
 Loads a saved predictions .pt file from inference.py and produces:
   1. A positioning-error histogram (PNG) for the poster

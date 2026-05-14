@@ -11,6 +11,7 @@ from datetime import datetime
 from accelerate import Accelerator
 import argparse
 
+# weighted loss was a claude suggestion
 def weighted_mse_loss(pred, target, pos_weight=1000):
     weights = 1 + pos_weight * target
     return (weights * (pred - target) ** 2).mean()
@@ -37,7 +38,7 @@ def compute_court_metrics(pred, y, threshold=7):
             else:
                 FP += 1
                 FN += 1
-
+    # we never increase true negatives since theres never a frame where the court is absent
     return TP, TN, FP, FN
 
 def train(num_epochs, accelerator=None):

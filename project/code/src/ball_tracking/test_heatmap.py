@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dataloader import generate_gaussian_heatmap
 
+#CLAUDE GENERATED FILE TO COMPARE VARIANCE EFFECTS ON HEATMAP
 def analyze_heatmap_variance():
     """Visualize ground truth heatmaps with different variances"""
     h, w = 360, 640
