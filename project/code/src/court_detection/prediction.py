@@ -53,7 +53,7 @@ if __name__ == "__main__":
         "img_size":     (320, 176),
         "batch_size":   8,
         "num_workers":  2,
-        "save_video":   False,
+        "save_video":   True,
         "output_dir":   f"/home/andyjalloh/andy/INFO8010-1_Project/project/outputs/court_detection/prediction_results_{timestamp}",
     }
 

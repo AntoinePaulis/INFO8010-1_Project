@@ -1,49 +1,63 @@
-# Not tested yet
-from ultralytics import YOLO
-import torch
 import os
+import cv2
+import torch
+from ultralytics import YOLO
+from datetime import datetime
+
+timestamp = datetime.now().strftime("%d%m%Y_%Hh%Mm%Ss")
 
 parameters = {
-    "device" : 0 if torch.cuda.is_available() else "cpu",
-    "imgsz" : 320,
-    "loading_file" : "yolov8n.pt_03052026_11h36m14s",
-    "dataset_dir" : "scratch/users/andyjalloh/cointe_dataset/",
-    "save_dir"   : f"/home/andyjalloh/antoine/INFO8010-1_Project/project/code/models/player_tracking/prediction_results_{timestamp}",
-    "conf" : 0.5,
-    "save" : True
+    "device":       0 if torch.cuda.is_available() else "cpu",
+    "imgsz":        320,
+    "loading_file": "yolov8s.pt_12052026_18h22m44s",
+    "dataset_dir":  "/scratch/users/andyjalloh/cointe_dataset/",
+    "conf":         0.5,
+    "save_video":   True,
+    "output_dir":   f"/home/andyjalloh/andy/INFO8010-1_Project/project/outputs/player_tracking/prediction_results_{timestamp}",
 }
 
-loading_path = f"/home/andyjalloh/antoine/INFO8010-1_Project/project/code/models/player_tracking/{parameters['loading_file']}/weights/best.pt"
+print(f"Using device: {parameters['device']}")
+
+loading_path = f"/home/andyjalloh/andy/INFO8010-1_Project/project/code/models/player_tracking/{parameters['loading_file']}/weights/best.pt"
+model = YOLO(loading_path)
 
 root_dir = parameters["dataset_dir"]
 
-print(f'Using device: {parameters['device']}')
-
-model = YOLO(loading_path)
-
-game_dir_list = sorted([
-    g for g in os.listdir(root_dir)
-    if os.path.isdir(os.path.join(root_dir, g))
-]) # Besoin de sorted ?
-
-for game in game_dir_list:            
+for game in sorted(d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))):
     game_path = os.path.join(root_dir, game)
-    clip_dir_list = sorted([
-        c for c in os.listdir(game_path)
-        if os.path.isdir(os.path.join(game_path, c))
-    ]) # Besoin de sorted ?
-    for clip in clip_dir_list:
+    for clip in sorted(d for d in os.listdir(game_path) if os.path.isdir(os.path.join(game_path, d))):
         clip_path = os.path.join(game_path, clip)
+        clip_out = os.path.join(parameters["output_dir"], game, clip)
+        frames_dir = os.path.join(clip_out, "frames")
+        os.makedirs(frames_dir, exist_ok=True)
 
-        results = model.predict(
+        if not any(f.lower().endswith(('.jpg', '.jpeg', '.png')) for f in os.listdir(clip_path)):
+            print(f"{game}/{clip}: no images, skipping")
+            continue
+
+        rendered = []
+        for result in model.predict(
             source=clip_path,
             imgsz=parameters["imgsz"],
             conf=parameters["conf"],
             device=parameters["device"],
-            save_dir=os.path.join(parameters["output_dir"], game, clip),
-            save=True,
-            plots=True,
-            stream=True # Not sur we need it
-        )
+            stream=True,
+            verbose=False,
+        ):
+            frame = result.plot()  # BGR numpy array with boxes drawn
+            fname = os.path.basename(result.path)
+            cv2.imwrite(os.path.join(frames_dir, fname), frame)
+            rendered.append(frame)
 
-        print(f"Prediction of {clip} of {game} is done")
+        print(f"{game}/{clip}: {len(rendered)} frames saved")
+
+        if parameters["save_video"] and rendered:
+            H, W = rendered[0].shape[:2]
+            out = cv2.VideoWriter(
+                os.path.join(clip_out, "annotated.mp4"),
+                cv2.VideoWriter_fourcc(*'mp4v'), 30.0, (W, H)
+            )
+            for frame in rendered:
+                out.write(frame)
+            out.release()
+            print(f"  Saved video: {clip_out}/annotated.mp4")
