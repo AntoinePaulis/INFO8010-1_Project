@@ -1,7 +1,7 @@
 import wandb
 import torch
 from model import TrackNetCourt
-import torch.nn as nn
+
 import math
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -10,6 +10,10 @@ import os
 from datetime import datetime
 from accelerate import Accelerator
 import argparse
+
+def weighted_mse_loss(pred, target, pos_weight=1000):
+    weights = 1 + pos_weight * target
+    return (weights * (pred - target) ** 2).mean()
 
 def compute_court_metrics(pred, y, threshold=7):
     B, nb_kps, _, W = pred.shape
@@ -54,7 +58,7 @@ def train(num_epochs, accelerator=None):
                 y = y.to(device)
 
             pred = network(x)
-            loss = criterion(pred, y)
+            loss = weighted_mse_loss(pred, y)
             train_losses.append(loss.detach())
 
             optimizer.zero_grad()
@@ -83,7 +87,7 @@ def train(num_epochs, accelerator=None):
 
                 pred = network(x)
 
-                loss = criterion(pred, y)
+                loss = weighted_mse_loss(pred, y)
                 mae = F.l1_loss(pred, y)
                 val_losses.append(loss.detach())
                 val_mae.append(mae.item())
@@ -153,9 +157,10 @@ if __name__ == "__main__":
         "num_workers": 2,
         "batch_size": 4,
         "split": 0.7,
-        "criterion": "MSE",
+        "criterion": "weighted_MSE",
+        "pos_weight": 1000,
         "learning_rate": 1e-5,
-        "num_epochs": 10,
+        "num_epochs": 100,
         "variance": 10,
         "scheduler": False,
         "weight_init": "he",
@@ -216,8 +221,6 @@ if __name__ == "__main__":
     if parameters["scheduler"]:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=parameters["step_size_scheduler"],
             gamma=parameters["gamma_scheduler"])
-
-    criterion = nn.MSELoss()
 
     trainSet = CourtDataset(type="train", split=parameters["split"], variance=parameters["variance"], normalization=parameters["normalization"], img_size=parameters["img_size"])
     valSet = CourtDataset(type="val", split=parameters["split"], variance=parameters["variance"], normalization=parameters["normalization"], img_size=parameters["img_size"])
